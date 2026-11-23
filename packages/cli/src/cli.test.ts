@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { parseCli, InitRunner, JoinRunner } from "./index.js";
+import { parseCli, InitRunner, JoinRunner, listTasks, claimTaskLocally } from "./index.js";
 import fs from "node:fs";
 
 const TEST_PORT = 9015;
@@ -24,14 +24,47 @@ describe("Milestone 5: Developer CLI & Room Runner Integration", () => {
     expect(initArgs.port).toBe(9999);
     expect(initArgs.roomId).toBe("alpha-room");
 
-    const joinArgs = parseCli(["join", "-u", "ws://localhost:9999", "-t", "tok123", "-l", "backend"]);
+    const joinArgs = parseCli(["join", "-u", "ws://localhost:9999", "-t", "tok123", "-l", "backend", "-n", "Aryan"]);
     expect(joinArgs.command).toBe("join");
     expect(joinArgs.url).toBe("ws://localhost:9999");
     expect(joinArgs.token).toBe("tok123");
     expect(joinArgs.lane).toBe("backend");
+    expect(joinArgs.name).toBe("Aryan");
+
+    const taskArgs = parseCli(["tasks", "--lane", "backend"]);
+    expect(taskArgs.command).toBe("tasks");
+    expect(taskArgs.lane).toBe("backend");
+
+    const claimArgs = parseCli(["claim", "task-auth-01", "--name", "Rohan"]);
+    expect(claimArgs.command).toBe("claim");
+    expect(claimArgs.taskId).toBe("task-auth-01");
+    expect(claimArgs.name).toBe("Rohan");
 
     const helpArgs = parseCli(["--help"]);
     expect(helpArgs.command).toBe("help");
+  });
+
+  it("CLI TASK COMMANDS: claimTaskLocally updates .nucleus/tasks.json", () => {
+    const nucleusDir = `${joinerWs}/.nucleus`;
+    fs.mkdirSync(nucleusDir, { recursive: true });
+    const initialTasks = [
+      {
+        id: "task-test-01",
+        title: "Test Task",
+        lane: "backend",
+        status: "unassigned",
+        assigned_to: null,
+        depends_on_contracts: []
+      }
+    ];
+    fs.writeFileSync(`${nucleusDir}/tasks.json`, JSON.stringify(initialTasks, null, 2), "utf8");
+
+    const ok = claimTaskLocally(joinerWs, "task-test-01", "Rohan");
+    expect(ok).toBe(true);
+
+    const updated = JSON.parse(fs.readFileSync(`${nucleusDir}/tasks.json`, "utf8"));
+    expect(updated[0].assigned_to).toBe("Rohan");
+    expect(updated[0].status).toBe("active");
   });
 
   it("E2E CLI RUNNER: Host room with InitRunner and connect via JoinRunner", async () => {

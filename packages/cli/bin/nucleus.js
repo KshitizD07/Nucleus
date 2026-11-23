@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { parseCli, printHelp, InitRunner, JoinRunner } from "../dist/index.js";
+import { parseCli, printHelp, InitRunner, JoinRunner, listTasks, claimTaskLocally } from "../dist/index.js";
 
 const cli = parseCli(process.argv.slice(2));
 
@@ -8,7 +8,18 @@ if (cli.command === "help" || cli.help) {
   process.exit(0);
 }
 
-if (cli.command === "init") {
+if (cli.command === "tasks") {
+  listTasks(cli.workspace || process.cwd(), cli.lane);
+  process.exit(0);
+} else if (cli.command === "claim") {
+  if (!cli.taskId) {
+    console.error("Error: Task ID required. Example: nucleus claim task-auth-01");
+    process.exit(1);
+  }
+  const assignee = cli.name || process.env.USER || process.env.USERNAME || "contributor";
+  const ok = claimTaskLocally(cli.workspace || process.cwd(), cli.taskId, assignee);
+  process.exit(ok ? 0 : 1);
+} else if (cli.command === "init") {
   const runner = new InitRunner({
     port: cli.port,
     roomId: cli.roomId,
