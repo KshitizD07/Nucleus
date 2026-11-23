@@ -132,6 +132,7 @@ This guarantees that:
 ```
 nucleus/
 ├── docs/                                          # Architecture specifications & analysis
+│   ├── technical-and-conceptual-blueprint.md      # Tech stack, distributed systems theories & patterns
 │   ├── multiplayer-room-architecture.md           # System architecture v2.0
 │   ├── multiplayer-ai-engineering-analysis (1).md # Pre-build economic & risk analysis
 │   └── Multiplayer AI Engineering Room.pdf        # Team project guide
