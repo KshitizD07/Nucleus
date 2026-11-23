@@ -73,6 +73,27 @@ export class DaemonClient {
     });
   }
 
+  public streamDiff(diff: { lane: string; active_file: string; files_changed: string[]; patch_summary: string; diff_hunk?: string }): void {
+    this.send("sharing:live_diff_stream", diff);
+  }
+
+  public notifyFocusChange(filePath: string, action: "editing" | "idle" | "saved"): void {
+    this.send("sharing:file_focus_change", {
+      lane: this.options.lane,
+      file_path: filePath,
+      action
+    });
+  }
+
+  public syncLaneShadow(sourceLane: string, filePath: string, content: string, version: number): void {
+    this.send("sharing:lane_shadow_sync", {
+      source_lane: sourceLane,
+      file_path: filePath,
+      content,
+      version
+    });
+  }
+
   public setStatus(status: DaemonStatus, activeFile?: string | null, taskId?: string | null): void {
     this.status = status;
     if (activeFile !== undefined) this.activeFile = activeFile;
