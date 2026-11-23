@@ -1,0 +1,74 @@
+================================================================================
+SESSION LOG: Implement Core Roadmap Enhancements (Reconnection, CLI Tasks, Security, AI Critic)
+================================================================================
+Date       : 2026-11-23
+Domain     : critic
+Feature    : roadmap_enhancements_implementation
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Transform the pending roadmap items identified in the architecture audit into
+     fully implemented, tested, and production-ready code:
+     1. Automated exponential backoff reconnection loop in `DaemonClient`.
+     2. Dedicated CLI task management subcommands (`nucleus tasks`, `nucleus claim`).
+     3. Built-in pattern-based `SecretScanner` in `@nucleus/critic` to prevent credential leaks.
+     4. Lease renewal warning APIs (`isExpiringSoon`, `getExpiringLocks`) in `LeaseMutex`.
+     5. Pluggable `AICriticPipeline` and `LLMCriticProvider` interface in `@nucleus/critic`.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - Issue 1 (Daemon Auto-Reconnect):
+     * Added `autoReconnect` option (default: true) and exponential retry backoff
+       (500ms, 1000ms, 2000ms up to 30,000ms max) in `packages/daemon/src/client/daemon-client.ts`.
+     * Added `onReconnect` hook. Verified intentional `sever()` does not trigger retry loops.
+     * Added unit test in `daemon-reconnect.test.ts`.
+   - Issue 2 (CLI Task Subcommands):
+     * Created `packages/cli/src/commands/tasks.ts` with `listTasks` and `claimTaskLocally`.
+     * Updated `packages/cli/src/args.ts` to parse `nucleus tasks` and `nucleus claim <task_id> [--name <name>]`.
+     * Updated `bin/nucleus.js` executable script to route commands with status feedback.
+     * Added CLI test verifying local `.nucleus/tasks.json` mutation in `cli.test.ts`.
+   - Issue 3 (Deterministic Secret Scanner):
+     * Created `packages/critic/src/scanner/secret-scanner.ts` with default regex rulesets
+       for Private Keys, AWS Access Keys, Stripe Secret Keys, and generic password assignments.
+     * Generates structured `CriticFindingItem` records with severity `"critical"`.
+     * Added test suite in `secret-scanner.test.ts`.
+   - Issue 4 (Proactive Lease Alerts):
+     * Added `isExpiringSoon(filePath, thresholdSeconds)` and `getExpiringLocks(thresholdSeconds)`
+       in `packages/coordinator/src/lock/mutex.ts` to alert nodes before automatic release.
+     * Added unit tests in `mutex.test.ts`.
+   - Issue 5 (Pluggable AI Critic Pipeline):
+     * Created `packages/critic/src/reviewer/ai-critic.ts` defining `LLMCriticProvider` interface.
+     * Implemented `StaticRuleCriticProvider` and `AICriticPipeline` evaluating Stage 1 checks
+       and Stage 2 generative reviews into formatted markdown.
+     * Added test suite in `ai-critic.test.ts`.
+
+3. WHY BEHIND THE CHANGE
+   - Network Resilience: Auto-reconnect protects against unstable Wi-Fi connections.
+   - Developer Ergonomics: `nucleus claim` and `nucleus tasks` enable quick task claims from any terminal tab.
+   - Defense-in-Depth: Automated secret scanning prevents accidental credential commits before merge.
+   - Extensibility: Pluggable AI critic interface allows swapping between mock rulesets and live LLM endpoints.
+
+4. FILES MODIFIED / CREATED
+   - [MODIFY] packages/daemon/src/client/daemon-client.ts
+   - [CREATE] packages/daemon/src/client/daemon-reconnect.test.ts
+   - [CREATE] packages/cli/src/commands/tasks.ts
+   - [MODIFY] packages/cli/src/args.ts
+   - [MODIFY] packages/cli/src/index.ts
+   - [MODIFY] packages/cli/bin/nucleus.js
+   - [MODIFY] packages/cli/src/cli.test.ts
+   - [CREATE] packages/critic/src/scanner/secret-scanner.ts
+   - [CREATE] packages/critic/src/scanner/secret-scanner.test.ts
+   - [MODIFY] packages/critic/src/index.ts
+   - [MODIFY] packages/coordinator/src/lock/mutex.ts
+   - [MODIFY] packages/coordinator/src/lock/mutex.test.ts
+   - [CREATE] packages/critic/src/reviewer/ai-critic.ts
+   - [CREATE] packages/critic/src/reviewer/ai-critic.test.ts
+   - [CREATE] logs/critic/roadmap_enhancements_implementation/roadmap_issues_implemented_2026-11-23.txt
+
+5. TESTING & VERIFICATION
+   - 13 test files, 39 tests all passing (`npm test`) in 2.56s.
+   - Clean monorepo build across all 5 packages (`npm run build`).
+
+6. NEXT STEPS
+   - Update `docs/real-world-scenarios-and-edge-cases.md` audit table reflecting all 5 issues as implemented and tested.
+================================================================================

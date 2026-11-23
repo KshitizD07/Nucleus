@@ -118,18 +118,21 @@
 
 ---
 
-## 6. Audit: Implemented vs. Pending Features & Engineering Solutions
+## 6. Audit: Implemented Features & Architecture Status
 
-| Feature | Current Implementation Status | Missing Element | Engineering Solution & Roadmap |
-| :--- | :--- | :--- | :--- |
-| **Room Handshake & Heartbeats** | **Implemented & Tested** (`coordinator-server.ts`, `daemon-client.ts`) | Automated reconnection loop | Implement exponential backoff in `DaemonClient` (`1s, 2s, 4s, 8s, max 30s`) on socket drop. |
-| **Contract Mutex & Leases** | **Implemented & Tested** (`mutex.ts`, `contract-store.ts`) | Lock renewal alerts | Emit heartbeat warning when lock lease has < 5s remaining before auto-release. |
-| **Cross-Lane Shadows** | **Implemented & Tested** (`shadow-mirror.ts`, `diff-watcher.ts`) | Selective lane subscriptions | Allow bandwidth-constrained nodes to subscribe only to specific lanes instead of mirroring all. |
-| **Agent Discovery (`PEERS.md`)** | **Implemented & Tested** (`peers-index.ts`) | Dynamic template customization | Allow projects to define custom agent guidance sections in `CONTRACT/peers.template.md`. |
-| **Task Board Engine** | **Implemented & Tested** (`task-board.ts`, `task-replica.ts`) | Dedicated CLI subcommands (`claim`, `list`) | Add `nucleus claim <id>` and `nucleus tasks` CLI commands to `packages/cli/src/args.ts`. |
-| **Disposable Git Worktrees** | **Implemented & Tested** (`worktree-manager.ts`, `deterministic-runner.ts`) | Live LLM API Critic Pass | Connect deterministic check results to an LLM provider API (OpenAI/Anthropic/Gemini) to generate rich architectural critiques. |
-| **Secret Scanning Gate** | **Implemented** (Runner supports shell commands) | Hardcoded default ruleset | Add pre-configured regex secret scanner check to default critique pipeline. |
-| **Network Discovery** | **Implemented** (Local LAN / WebSocket IP) | WAN NAT traversal | Support secure tunneling (e.g., ngrok / Cloudflare Tunnel / Tailscale) in `nucleus init` output. |
+| Feature | Current Implementation Status | How It Works & File Location |
+| :--- | :--- | :--- |
+| **Room Handshake & Heartbeats** | **Implemented & Tested** | `coordinator-server.ts`, `daemon-client.ts` with 2s heartbeats and token auth. |
+| **Automated Reconnection Loop** | **Implemented & Tested** | Exponential backoff (500ms -> 30s) in `packages/daemon/src/client/daemon-client.ts`. |
+| **Contract Mutex & Leases** | **Implemented & Tested** | 15s lease locks in `packages/coordinator/src/lock/mutex.ts` & versioned `contract-store.ts`. |
+| **Proactive Lease Alerts** | **Implemented & Tested** | `isExpiringSoon` and `getExpiringLocks` in `packages/coordinator/src/lock/mutex.ts`. |
+| **Cross-Lane Shadows** | **Implemented & Tested** | Live uncommitted file mirroring in `packages/daemon/src/shadow/shadow-mirror.ts`. |
+| **Agent Discovery (`PEERS.md`)** | **Implemented & Tested** | Dynamic markdown context injection in `packages/daemon/src/shadow/peers-index.ts`. |
+| **Task Board Engine & CLI** | **Implemented & Tested** | `task-board.ts`, `tasks.ts`, and CLI subcommands `nucleus tasks` & `nucleus claim <id>`. |
+| **Disposable Git Worktrees** | **Implemented & Tested** | Detached worktree runner in `packages/critic/src/worktree/worktree-manager.ts`. |
+| **Deterministic Secret Scanning** | **Implemented & Tested** | Regex scanner for AWS, Stripe, and private keys in `packages/critic/src/scanner/secret-scanner.ts`. |
+| **Pluggable AI Critic Pipeline** | **Implemented & Tested** | `AICriticPipeline` & `LLMCriticProvider` interface in `packages/critic/src/reviewer/ai-critic.ts`. |
+| **Network Discovery** | **Implemented** | Local LAN / WebSocket IP (custom URL support in CLI). |
 
 ---
 
