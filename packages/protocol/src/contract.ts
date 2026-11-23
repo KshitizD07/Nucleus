@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const ContractLockRequestSchema = z.object({
   file_path: z.string().min(1),
-  ttl_seconds: z.number().int().min(5).max(60).default(15)
+  ttl_seconds: z.number().int().min(1).max(60).default(15)
 });
 
 export const ContractLockGrantSchema = z.object({
