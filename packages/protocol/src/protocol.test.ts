@@ -3,7 +3,10 @@ import {
   MessageEnvelopeSchema,
   ContractLockRequestSchema,
   TaskItemSchema,
-  LiveDiffStreamSchema
+  LiveDiffStreamSchema,
+  HelloPayloadSchema,
+  HeartbeatPayloadSchema,
+  SeveredPayloadSchema
 } from "@nucleus/protocol";
 
 describe("Protocol Envelopes and Schemas", () => {
@@ -61,5 +64,34 @@ describe("Protocol Envelopes and Schemas", () => {
     const parsed = LiveDiffStreamSchema.parse(frame);
     expect(parsed.lane).toBe("frontend");
     expect(parsed.files_changed.length).toBe(2);
+  });
+});
+
+describe("Session Schemas", () => {
+  it("should parse a valid hello payload", () => {
+    const hello = {
+      node_id: "node-abc",
+      join_token: "tok-xyz",
+      workspace_path: "/home/aryan/opendoor",
+      lane: "backend",
+      capabilities: { cli: "claude-code", platform: "linux", version: "1.0.0" }
+    };
+    const parsed = HelloPayloadSchema.parse(hello);
+    expect(parsed.lane).toBe("backend");
+    expect(parsed.capabilities.cli).toBe("claude-code");
+  });
+
+  it("should apply defaults to heartbeat payload", () => {
+    const hb = { status: "active" as const };
+    const parsed = HeartbeatPayloadSchema.parse(hb);
+    expect(parsed.task_id).toBeNull();
+    expect(parsed.contract_version).toBe(0);
+    expect(parsed.active_file).toBeNull();
+  });
+
+  it("should parse severed payload with default reason", () => {
+    const severed = { node_id: "node-abc" };
+    const parsed = SeveredPayloadSchema.parse(severed);
+    expect(parsed.reason).toBe("user_exit");
   });
 });
