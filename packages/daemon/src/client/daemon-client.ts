@@ -57,6 +57,23 @@ export class DaemonClient {
     this.ws?.close(1000, "user_exit");
   }
 
+  public requestContractLock(filePath: string, ttlSeconds: number = 15): void {
+    this.send("contract:lock_req", { file_path: filePath, ttl_seconds: ttlSeconds });
+  }
+
+  public releaseContractLock(filePath: string): void {
+    this.send("contract:lock_release", { file_path: filePath });
+  }
+
+  public publishContractUpdate(filePath: string, content: string, touchedSections: string[] = []): void {
+    this.send("contract:update", {
+      file_path: filePath,
+      version: 0, // Coordinator computes and bumps authoritative version
+      content,
+      touched_sections: touchedSections
+    });
+  }
+
   public setStatus(status: DaemonStatus, activeFile?: string | null, taskId?: string | null): void {
     this.status = status;
     if (activeFile !== undefined) this.activeFile = activeFile;
