@@ -1,0 +1,20 @@
+{
+  "name": "@nucleus/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "nucleus": "./bin/nucleus.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@nucleus/protocol": "*",
+    "@nucleus/coordinator": "*",
+    "@nucleus/daemon": "*",
+    "@nucleus/critic": "*"
+  }
+}
