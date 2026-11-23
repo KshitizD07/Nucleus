@@ -1,0 +1,41 @@
+================================================================================
+SESSION LOG: Agent Context Protocol via .nucleus/PEERS.md
+================================================================================
+Date       : 2026-11-23
+Domain     : daemon
+Feature    : shadow_peer_discovery
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Solve how local LLM agents (Claude Code, Antigravity, Aider) automatically discover
+     and know that peer code is available for live inspection without guessing or manual user intervention.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - Designed the `.nucleus/PEERS.md` live discovery file generated automatically by `sphere-node`.
+   - The file maintains:
+     * A real-time roster of active lanes, contributors, and their currently focused files.
+     * System instructions explicitly tailored for AI coding agents instructing them:
+       "Do not guess API shapes. Check .nucleus/shadows/<lane>/ to inspect peer implementations."
+   - Added template in `@nucleus/daemon` (`src/shadow/PEERS.md.template`).
+
+3. WHY BEHIND THE CHANGE
+   - AI Agent Autonomy: LLMs naturally read workspace markdown context files (e.g., `CLAUDE.md`,
+     `README.md`, `.nucleus/PEERS.md`). By placing instructions in their standard context window,
+     the agent proactively checks peer code before writing mismatched frontend API hooks.
+
+4. WHY NOT THE ALTERNATIVE(S)
+   - Alternative 1: Rely solely on human prompting ("Hey Claude, check frontend shadows").
+     * Why Rejected: Humans often forget to prompt their agent to inspect peer code, leading
+       to preventable critique gate rejections.
+
+5. FILES MODIFIED / CREATED
+   - [CREATE] packages/daemon/src/shadow/PEERS.md.template
+   - [CREATE] logs/daemon/shadow_peer_discovery/peers_md_discovery_2026-11-23.txt
+
+6. TESTING & VERIFICATION
+   - Verified clean monorepo build with `npm run build`.
+
+7. NEXT STEPS
+   - Connect daemon WebSocket event handler to rewrite `.nucleus/PEERS.md` on peer focus changes.
+================================================================================
