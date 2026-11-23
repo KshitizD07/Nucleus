@@ -61,6 +61,10 @@ export class TaskBoardManager {
     return this.getAll().filter((t) => t.lane === lane);
   }
 
+  public getStoragePath(): string {
+    return this.storagePath;
+  }
+
   private persistToDisk(): void {
     const data = JSON.stringify(this.getAll(), null, 2);
     fs.writeFileSync(this.storagePath, data, "utf8");

@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import {
   HelloPayloadSchema,
@@ -7,8 +9,10 @@ import {
   ContractLockReleaseSchema,
   ContractUpdateRequestSchema,
   TaskClaimSchema,
-  TaskStatusUpdateSchema
+  TaskStatusUpdateSchema,
+  type TaskItem
 } from "@nucleus/protocol";
+import { AICriticPipeline, AutoLLMCriticProvider } from "@nucleus/critic";
 import { NodeRegistry } from "../state/node-registry.js";
 import { LeaseMutex } from "../lock/mutex.js";
 import { EventLog } from "../state/event-log.js";
@@ -35,6 +39,7 @@ export class CoordinatorServer {
   private readonly taskBoard: TaskBoardManager;
   private readonly sockets: Map<string, WebSocket>;
   private readonly roomId: string;
+  private readonly criticPipeline: AICriticPipeline;
   private heartbeatTimer: NodeJS.Timeout | null = null;
 
   constructor(options: CoordinatorOptions) {
@@ -45,6 +50,7 @@ export class CoordinatorServer {
     this.invites = new InviteStore();
     this.contractStore = new ContractStore(options.contractDir ?? "./CONTRACT");
     this.taskBoard = new TaskBoardManager(options.taskDir ?? options.logDir);
+    this.criticPipeline = new AICriticPipeline(new AutoLLMCriticProvider());
     this.sockets = new Map();
     this.wss = new WebSocketServer({ port: options.port });
   }
@@ -278,6 +284,70 @@ export class CoordinatorServer {
     if (result.success && result.task) {
       this.eventLog.append("task_status_changed", { task_id: update.task_id, status: update.status, node_id });
       this.broadcast(buildMessage(this.roomId, "coordinator", "task:status", result.task));
+
+      if (update.status === "in_review") {
+        this.runAutomatedCritique(result.task, node_id);
+      }
+    }
+  }
+
+  private async runAutomatedCritique(task: TaskItem, nodeId: string): Promise<void> {
+    console.log(`\n[Critique Gate] 🔍 Auto-review triggered for Task [${task.id}] (${task.lane})...`);
+
+    const contractContext = this.contractStore.getAll().map((c) => `# ${c.filePath}\n${c.content}`).join("\n\n");
+    let diffContext = "";
+    const taskStorageDir = path.dirname(this.taskBoard.getStoragePath());
+    const shadowLaneDir = path.join(taskStorageDir, "shadows", task.lane);
+
+    if (fs.existsSync(shadowLaneDir)) {
+      const walkFiles = (dir: string): string[] => {
+        const found: string[] = [];
+        for (const item of fs.readdirSync(dir)) {
+          const p = path.join(dir, item);
+          if (fs.statSync(p).isDirectory()) {
+            found.push(...walkFiles(p));
+          } else {
+            found.push(p);
+          }
+        }
+        return found;
+      };
+
+      const files = walkFiles(shadowLaneDir);
+      diffContext = files
+        .map((f) => `// File: ${path.relative(shadowLaneDir, f)}\n${fs.readFileSync(f, "utf8")}`)
+        .join("\n\n");
+    }
+
+    try {
+      const { result, markdown } = await this.criticPipeline.evaluate({
+        taskId: task.id,
+        lane: task.lane,
+        spec: `${task.title}\n\nAgreed Contracts:\n${contractContext}`,
+        diff: diffContext || "(Implementation files submitted for review)",
+        deterministicChecksPassed: true
+      });
+
+      const critiquesDir = path.join(taskStorageDir, "critiques");
+      fs.mkdirSync(critiquesDir, { recursive: true });
+      fs.writeFileSync(path.join(critiquesDir, `${task.id}.md`), markdown, "utf8");
+
+      const newStatus = result.verdict === "approved" ? "approved" : "changes_requested";
+      const updated = this.taskBoard.updateStatus(task.id, newStatus);
+
+      if (updated.success && updated.task) {
+        this.eventLog.append("task_status_changed", { task_id: task.id, status: newStatus, node_id: "critique-gate" });
+        this.broadcast(buildMessage(this.roomId, "coordinator", "task:status", updated.task));
+      }
+
+      if (result.verdict === "approved") {
+        console.log(`[Critique Gate] ✅ Task [${task.id}] APPROVED! Report written to .nucleus/critiques/${task.id}.md`);
+        console.log(`[Critique Gate] 🎉 Contributor ${task.assigned_to || nodeId} may now git push to GitHub.\n`);
+      } else {
+        console.log(`[Critique Gate] ⚠️ Task [${task.id}] CHANGES_REQUESTED. Report written to .nucleus/critiques/${task.id}.md\n`);
+      }
+    } catch (err: any) {
+      console.error(`[Critique Gate] Automated review failed: ${err.message}`);
     }
   }
 

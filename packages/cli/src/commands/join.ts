@@ -107,7 +107,15 @@ export class JoinRunner {
         this.shadowMirror?.applySync(payload);
       } else if (type === "task:status") {
         this.taskReplica?.applyUpdate(payload);
-        console.log(`[Tasks] Task [${payload.id}] -> status: ${payload.status}`);
+        if (payload.status === "approved") {
+          console.log(`\n🎉 Task [${payload.id}] was APPROVED by Critique Gate!`);
+          console.log(`🚀 Ready to git commit and push to remote!\n`);
+        } else if (payload.status === "changes_requested") {
+          console.log(`\n⚠️ Task [${payload.id}] CHANGES_REQUESTED by Critique Gate.`);
+          console.log(`🔍 Inspect .nucleus/critiques/${payload.id}.md to view required fixes.\n`);
+        } else {
+          console.log(`[Tasks] Task [${payload.id}] -> status: ${payload.status}`);
+        }
       }
     };
 
