@@ -5,3 +5,4 @@ export * from "./contract/contract-watcher.js";
 export * from "./shadow/peers-index.js";
 export * from "./shadow/shadow-mirror.js";
 export * from "./watcher/diff-watcher.js";
+export * from "./task/task-replica.js";
