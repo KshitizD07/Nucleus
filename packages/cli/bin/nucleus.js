@@ -26,12 +26,15 @@ if (cli.command === "tasks") {
     workspaceRoot: cli.workspace
   });
 
-  const { inviteCommand } = runner.start();
+  const { inviteCommand, tunnelGuidance } = runner.start();
 
-  console.log("Sample invite commands for teammates:\n");
+  console.log("Sample invite commands for teammates (Local LAN):\n");
   console.log(`  Frontend :  ${inviteCommand("frontend")}`);
   console.log(`  Backend  :  ${inviteCommand("backend")}`);
   console.log(`  QA / DB  :  ${inviteCommand("qa")}\n`);
+  if (tunnelGuidance) {
+    console.log(tunnelGuidance + "\n");
+  }
   console.log("Press Ctrl+C to close room.\n");
 
   process.on("SIGINT", () => {

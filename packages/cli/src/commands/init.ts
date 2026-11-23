@@ -20,7 +20,11 @@ export class InitRunner {
     this.roomId = options.roomId || path.basename(this.workspaceRoot);
   }
 
-  public start(): { coordinator: CoordinatorServer; inviteCommand: (lane: string) => string } {
+  public start(): {
+    coordinator: CoordinatorServer;
+    inviteCommand: (lane: string, hostUrl?: string) => string;
+    tunnelGuidance: string;
+  } {
     const nucleusDir = path.join(this.workspaceRoot, ".nucleus");
     const contractDir = path.join(this.workspaceRoot, "CONTRACT");
     const logsDir = path.join(nucleusDir, "logs");
@@ -55,15 +59,23 @@ export class InitRunner {
     console.log(`Bound to workspace: ${this.workspaceRoot}`);
     console.log(`======================================================\n`);
 
-    const inviteCommand = (lane: string): string => {
+    const inviteCommand = (lane: string, hostUrl = `ws://localhost:${this.port}`): string => {
       if (!this.coordinator) throw new Error("Coordinator not running");
       const token = this.coordinator.issueInvite(lane);
-      return `nucleus join --url ws://localhost:${this.port} --token ${token} --lane ${lane}`;
+      return `nucleus join --url ${hostUrl} --token ${token} --lane ${lane}`;
     };
+
+    const tunnelGuidance = [
+      "🌐 WAN / Internet Access Options (No Port Forwarding Required):",
+      `   1. Cloudflare Tunnel : cloudflared tunnel --url ws://localhost:${this.port}`,
+      `   2. Tailscale VPN     : nucleus join --url ws://<tailscale-ip>:${this.port} ...`,
+      `   3. Ngrok             : ngrok http ${this.port}`
+    ].join("\n");
 
     return {
       coordinator: this.coordinator,
-      inviteCommand
+      inviteCommand,
+      tunnelGuidance
     };
   }
 
