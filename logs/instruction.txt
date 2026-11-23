@@ -1,0 +1,125 @@
+================================================================================
+NUCLEUS PROJECT — DAILY SESSION LOGGING PROTOCOL & INSTRUCTIONS
+================================================================================
+
+[ PURPOSE ]
+This document defines the standard operating procedure for logging daily engineering work,
+distributed systems decisions, protocol updates, bug fixes, and feature implementations
+across the Nucleus multiplayer engineering room. It guarantees that our architecture
+decisions, ToS compliance boundary models, and protocol iterations remain searchable,
+transparent, and auditable across all contributors and sessions.
+
+[ CRITICAL RULES ]
+1. Every session that introduces a major change (architecture shift, protocol message change,
+   Zod schema modification, lock leasing policy, daemon jail update, or critique workflow)
+   MUST be logged.
+2. Every log entry MUST explicitly capture:
+   a) The "WHY BEHIND THE CHANGE" (technical, performance, security, or compliance rationale)
+   b) The "WHY NOT THE ALTERNATIVE(S)" (tradeoffs and why alternate designs were rejected)
+
+--------------------------------------------------------------------------------
+1. FOLDER & FILE NAMING STRUCTURE
+--------------------------------------------------------------------------------
+
+All logs MUST follow this exact directory hierarchy:
+
+  logs/
+  ├── <domain>/
+  │   └── <feature>/
+  │       └── <task_name>_<YYYY-MM-DD>.txt
+
+Where:
+  • <domain>    : The high-level component of Nucleus.
+                  Allowed domains:
+                  - docs         (Specifications, architecture guides, ADRs)
+                  - protocol     (Zod envelope schemas, network wire formats, crypto)
+                  - coordinator  (Room session state, lease mutex, taskboard, diff hub)
+                  - daemon       (Local node companion: workspace jail, git diff stream, contract replica)
+                  - critic       (Disposable git worktrees, lint/test runners, AI review generator)
+                  - ui           (TUI terminal feeds, room activity monitor)
+
+  • <feature>   : The specific subsystem.
+                  Examples: architecture, contract_sync, lease_mutex, diff_stream,
+                            taskboard, worktree_gate, workspace_jail, heartbeat
+
+  • <task_name> : A clear, lowercase snake_case description of the task.
+                  Examples: pull_model_refactor, zod_envelope_setup, lease_mutex_lock,
+                            git_diff_streamer, worktree_critic_runner
+
+  • <YYYY-MM-DD>: The date of the session (e.g., 2026-11-23).
+
+Examples:
+  - logs/docs/architecture/pull_model_refactor_2026-11-23.txt
+  - logs/protocol/envelope/zod_message_schemas_2026-11-24.txt
+  - logs/coordinator/state/lease_mutex_lock_2026-11-25.txt
+  - logs/daemon/sharing/git_diff_streamer_2026-11-26.txt
+  - logs/critic/runner/worktree_critic_pipeline_2026-11-27.txt
+
+--------------------------------------------------------------------------------
+2. PROMPT TEMPLATE TO PASS TO THE AI AGENT
+--------------------------------------------------------------------------------
+
+"""
+Please record a daily session log for today's work based on the Nucleus standard protocol:
+- Domain  : [docs / protocol / coordinator / daemon / critic / ui]
+- Feature : [e.g., architecture / contract_sync / diff_stream / lease_mutex]
+- Task    : [e.g., pull_model_refactor / zod_envelope_setup]
+- Date    : [Today's Date in YYYY-MM-DD format]
+
+Navigate to logs/<domain>/<feature>/ (create directories if needed),
+and create the log file: <task_name>_<YYYY-MM-DD>.txt.
+
+Include:
+1. Summary / Objective of the session
+2. Key Decisions & Work Performed
+3. WHY Behind the Change (Rationale, Drivers, Compliance, Benefits)
+4. WHY NOT the Alternative(s) (Tradeoffs, Rejection Reasons)
+5. Files Created / Modified / Deleted
+6. Protocol / Message / Contract Changes (if applicable)
+7. Verification & Testing Performed
+8. Pending / Next Steps
+"""
+
+--------------------------------------------------------------------------------
+3. STANDARD LOG FILE TEMPLATE (<task_name>_<YYYY-MM-DD>.txt)
+--------------------------------------------------------------------------------
+
+================================================================================
+SESSION LOG: <TASK_TITLE>
+================================================================================
+Date       : YYYY-MM-DD
+Domain     : <domain>
+Feature    : <feature>
+Status     : [ Completed / In Progress / Blocked ]
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Brief description of what we set out to build, fix, or refactor today.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - Detailed breakdown of implemented logic, state machine changes, or algorithms.
+
+3. WHY BEHIND THE CHANGE
+   - The concrete rationale behind this decision (e.g., AI provider ToS compliance,
+     concurrency guarantees, security boundaries, maintainability).
+
+4. WHY NOT THE ALTERNATIVE(S)
+   - Alternative approaches considered.
+   - Why those alternatives were rejected (drawbacks, technical risks, anti-bot exposure).
+
+5. FILES MODIFIED / CREATED
+   - [CREATE] path/to/new_file.ts
+   - [MODIFY] path/to/existing_file.ts
+   - [DELETE] path/to/unused_file.ts
+
+6. PROTOCOL / API / EVENT CHANGES (if applicable)
+   - Zod Schema / WebSocket message type added or updated
+   - Contract format or CLI interaction changes
+
+7. TESTING & VERIFICATION
+   - Tests executed (unit, schema validation, network simulation).
+   - Results and verification status.
+
+8. NEXT STEPS / OPEN ITEMS
+   - What needs to be done in the next session.
+================================================================================

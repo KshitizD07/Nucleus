@@ -1,0 +1,79 @@
+================================================================================
+SESSION LOG: Architecture Transition to Pure Pull Model & Live Code Sharing
+================================================================================
+Date       : 2026-11-23
+Domain     : docs
+Feature    : architecture
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Analyze project foundations in docs/ and align the system architecture with a
+     critical design rule: eliminate central control over contributor CLIs/terminals
+     to guarantee immunity from Anthropic/Google subscription abuse enforcement, while
+     simultaneously establishing real-time live code/diff sharing so team collaboration
+     and visibility remain intact.
+   - Restructure repository documentation and initialize official Git tracking.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - Inspected `docs/Multiplayer AI Engineering Room — Team Project Guide.pdf` and
+     `docs/multiplayer-ai-engineering-analysis (1).md`.
+   - Identified the architectural flaw: the legacy "Central-Controlled Mode" and child-process
+     agent spawning model violated emerging provider abuse telemetry (appearing as automated
+     third-party tools driving logged-in user subscriptions).
+   - Refactored `docs/multiplayer-room-architecture.md` to Version 2.0 (Pull Model & Live Streaming):
+     * Node Daemon (`sphere-node`) now runs purely as an unprivileged synchronization companion;
+       it never spawns, wraps, or injects keystrokes into local AI CLIs.
+     * Established the **File-Based Pull Model**: Room coordinator and critic engine communicate
+       through repo workspace files (`CONTRACT/`, `TASKS.json`, `.nucleus/critiques/*.md`).
+     * Added **Real-Time Live Diff Streaming**: `sphere-node` streams in-progress git diffs
+       and active file events to the room coordinator so all peers see work being built live.
+     * Replaced automated prompt injection in the Critique Gate with structured markdown review
+       files generated in disposable git worktrees.
+   - Organized root files into `docs/`, initialized the local Git repository, created the root
+     commit, and pushed tracking to `origin/main` on GitHub (`KshitizD07/Nucleus`).
+   - Inspected Opendoor project conventions to replicate standard logging and commit protocols.
+
+3. WHY BEHIND THE CHANGE
+   - Compliance & Account Safety: Anthropic and Google actively enforce against headless
+     relay agents and automated keystroke drivers operating against consumer/pro subscriptions.
+     By enforcing that the human alone operates their official CLI to read local workspace files,
+     Nucleus carries zero ToS exposure.
+   - Multiplayer Awareness: Without live diff streaming, dropping central control would reduce
+     the tool to an asynchronous ticketing relay. Live diff streaming preserves true multiplayer
+     co-presence (peers seeing schemas, types, and logic evolve in real time).
+   - Architectural Simplicity: Eliminating PTY terminal multiplexing, remote keystroke injection,
+     and complex child-process adapters cuts implementation risk and shaves 1–2 weeks off MVP.
+
+4. WHY NOT THE ALTERNATIVE(S)
+   - Alternative 1: Keep Central-Controlled Mode with a strict kill-switch
+     * Why Rejected: Telemetry patterns (burst rates, remote network-triggered commands) still
+       look identical to third-party subscription pooling bots. The risk of account suspension
+       is unacceptable for real users.
+   - Alternative 2: Pure Asynchronous Git-Only Sharing (wait for commits/PRs)
+     * Why Rejected: Destroys the "live room" sensation. Developers would work in silos and only
+       discover contract divergence or overlapping work hours later at PR time.
+   - Alternative 3: Custom Headless API Key Proxies
+     * Why Rejected: Central credential handling breaks the core trust boundary and introduces
+       massive legal liability.
+
+5. FILES MODIFIED / CREATED
+   - [CREATE] docs/Multiplayer AI Engineering Room — Team Project Guide.pdf (relocated to docs/)
+   - [CREATE] docs/multiplayer-ai-engineering-analysis (1).md (relocated to docs/)
+   - [CREATE] docs/multiplayer-room-architecture.md (updated to v2.0 Pull Model)
+   - [CREATE] logs/instruction.txt
+   - [CREATE] logs/docs/architecture/pull_model_refactor_2026-11-23.txt
+
+6. PROTOCOL / API / EVENT CHANGES (if applicable)
+   - Updated message protocol in architecture spec:
+     * REMOVED: `control:mode_set`, `control:steer_prompt`, `control:agent_output`
+     * ADDED: `sharing:live_diff_stream`, `sharing:file_focus_change`, `gate:critic_findings_file`
+
+7. TESTING & VERIFICATION
+   - Verified Git repository connection: successfully pushed root commit to GitHub (`origin/main`).
+   - Verified file moves and path integrity using PowerShell commands.
+
+8. NEXT STEPS / OPEN ITEMS
+   - Initialize root `package.json` with TypeScript, ESM, and core dependencies (`ws`, `zod`).
+   - Define the shared Zod message envelope schemas (`packages/protocol/`).
+================================================================================
