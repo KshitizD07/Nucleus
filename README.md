@@ -197,10 +197,13 @@ Nucleus follows the **Opendoor Engineering Protocol**:
 
 ---
 
-## 🗺️ MVP Roadmap (3–5 Weeks)
+## 🗺️ MVP Roadmap (Phases 1 & 2)
 
-- [x] **Week 0:** Pre-build analysis, ToS risk evaluation, architecture v2.0 refactor (Pull Model & Live Diffs).
-- [ ] **Weeks 1–2:** Zod protocol envelope, `sphere-node` companion daemon, room coordinator (lease mutex, JSONL replay log, contract broadcast).
-- [ ] **Week 3:** Task board sync, Critique Gate v1 (Git worktree test runner + AI critic generating markdown feedback), live diff feed aggregation.
-- [ ] **Week 4:** First dogfood run on **Opendoor** (Hostel Management backend) with 2 nodes; measure speedup vs solo baseline.
-- [ ] **Week 5:** Scale test with 3–4 nodes on **SkillSphere**; publish empirical findings on multi-agent parallelism limits.
+- [x] **Week 0:** Pre-build analysis, ToS risk evaluation, architecture v2.0 refactor (Pure Pull Model & Live Diffs).
+- [x] **Milestone 1:** Zod protocol envelope, `sphere-node` companion daemon, room coordinator (join handshake, heartbeat management, JSONL replay log).
+- [x] **Milestone 2:** Living Contract synchronization, lease-based mutex locks (15s TTL), and daemon contract replicas.
+- [x] **Milestone 3:** Live WIP diff streaming, cross-lane shadow mirroring (`.nucleus/shadows/<lane>/`), and automatic `.nucleus/PEERS.md` context injection for AI agents.
+- [x] **Milestone 4:** Task Board lifecycle state machine (`tasks.json`), disposable Git worktrees, deterministic check runners, and formatted markdown critique generation.
+- [x] **Milestone 5:** Developer CLI package (`@nucleus/cli`) with executable `nucleus init` (room host) and `nucleus join` (contributor companion).
+- [ ] **First Dogfood Session:** Multi-lane parallel build run on **Opendoor** (Hostel Management backend) with 2 nodes; measure speedup vs solo baseline.
+- [ ] **Scale Run:** 3–4 nodes on **SkillSphere**; empirical publish of multi-agent parallelism limits.
