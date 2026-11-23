@@ -94,6 +94,21 @@ export class DaemonClient {
     });
   }
 
+  public claimTask(taskId: string): void {
+    this.send("task:claim", {
+      task_id: taskId,
+      node_id: this.options.node_id
+    });
+  }
+
+  public updateTaskStatus(taskId: string, status: "unassigned" | "assigned" | "active" | "in_review" | "changes_requested" | "approved", branch?: string): void {
+    this.send("task:status", {
+      task_id: taskId,
+      status,
+      branch
+    });
+  }
+
   public setStatus(status: DaemonStatus, activeFile?: string | null, taskId?: string | null): void {
     this.status = status;
     if (activeFile !== undefined) this.activeFile = activeFile;
