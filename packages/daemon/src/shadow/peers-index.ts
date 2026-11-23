@@ -20,6 +20,7 @@ export class PeersIndexManager {
     this.nucleusDir = this.jail.resolveSafe(".nucleus");
     this.peersFilePath = this.jail.resolveSafe(path.join(".nucleus", "PEERS.md"));
     fs.mkdirSync(this.nucleusDir, { recursive: true });
+    this.render(); // Ensure .nucleus/PEERS.md is immediately created upon initialization
   }
 
   public setPeer(peer: PeerRecord): void {
