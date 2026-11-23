@@ -132,6 +132,7 @@ This guarantees that:
 ```
 nucleus/
 ├── docs/                                          # Architecture specifications & analysis
+│   ├── real-world-scenarios-and-edge-cases.md     # Practical scenarios, edge cases & roadmap solutions
 │   ├── technical-and-conceptual-blueprint.md      # Tech stack, distributed systems theories & patterns
 │   ├── multiplayer-room-architecture.md           # System architecture v2.0
 │   ├── multiplayer-ai-engineering-analysis (1).md # Pre-build economic & risk analysis

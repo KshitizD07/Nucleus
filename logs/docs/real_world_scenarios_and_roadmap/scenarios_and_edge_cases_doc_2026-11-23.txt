@@ -1,0 +1,42 @@
+================================================================================
+SESSION LOG: Add Real-World Scenarios, Edge Cases & Roadmap Solutions Document
+================================================================================
+Date       : 2026-11-23
+Domain     : docs
+Feature    : real_world_scenarios_and_roadmap
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Create a dedicated comprehensive operational guide capturing real-world failure
+     modes, spontaneous room scenarios, contributor idleness, AI agent modal locks,
+     implemented guarantees, and architectural solutions for roadmap features.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - Created `docs/real-world-scenarios-and-edge-cases.md` detailing:
+     * Spontaneous room invites and multi-tier visibility (`.nucleus/PEERS.md`, `tasks.json`, `.nucleus/shadows/`).
+     * Network blips: Contributor Wi-Fi drop vs. Initiator coordinator drop and JSONL log replay.
+     * Task transition workflows: Backlog claiming, cross-lane shadow pairing, and collaborative reviews.
+     * AI Agent "Modal Lock" resolutions: File-driven natural language claiming and two-tab separation.
+     * Failure modes: Rogue agent out-of-lane edits, simultaneous claim collisions, contributor abandonment,
+       and secret leak prevention.
+     * Comprehensive feature audit table comparing implemented & tested code vs. roadmap items,
+       including design blueprints for auto-reconnect, CLI task commands, and LLM critic passes.
+   - Updated repository `README.md` to index this document.
+
+3. WHY BEHIND THE CHANGE
+   - Provides full transparency on what is currently operational in code vs. roadmap design,
+     ensuring engineering alignment and clear guidance for testing and future development.
+
+4. FILES MODIFIED / CREATED
+   - [CREATE] docs/real-world-scenarios-and-edge-cases.md
+   - [MODIFY] README.md
+   - [CREATE] logs/docs/real_world_scenarios_and_roadmap/scenarios_and_edge_cases_doc_2026-11-23.txt
+
+5. TESTING & VERIFICATION
+   - Verified Markdown links and formatting.
+
+6. NEXT STEPS
+   - Implement highest-priority roadmap items: CLI task commands (`nucleus claim`, `nucleus tasks`)
+     and automated daemon reconnection.
+================================================================================
