@@ -1,0 +1,63 @@
+================================================================================
+SESSION LOG: Milestone 3 — Live Diff Streaming, Shadow Mirrors & PEERS.md Discovery
+================================================================================
+Date       : 2026-11-23
+Domain     : daemon
+Feature    : live_diff_streaming_and_shadows
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Implement Milestone 3 of the Nucleus architecture:
+     * Live work-in-progress code sharing without Git commits or remote pushes.
+     * Automatic agent context directory generation (`.nucleus/PEERS.md`).
+     * Cross-lane uncommitted file shadow mirrors (`.nucleus/shadows/<lane>/...`).
+     * Workspace file & diff watcher streaming incremental change hunks.
+     * Coordinator routing of file focus updates and peer shadow syncs.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - `@nucleus/daemon`:
+     * `shadow/peers-index.ts` (`PeersIndexManager`):
+       - Renders live markdown table with lane, node ID, status, and active file focus.
+       - Generates explicit instructions for AI coding agents (Claude Code, Antigravity, Aider)
+         directing them to check `.nucleus/shadows/<lane>/` instead of guessing payload shapes.
+     * `shadow/shadow-mirror.ts` (`ShadowMirror`):
+       - Safely writes peer lane uncommitted files inside the workspace jail under `.nucleus/shadows/<lane>/`.
+       - Implements version monotonicity enforcement to ignore stale out-of-order frames.
+     * `watcher/diff-watcher.ts` (`WorkspaceDiffWatcher`):
+       - File-watcher with debouncing (300ms) excluding `node_modules`, `.git`, `.nucleus`, `dist`.
+       - Detects edits and calculates lightweight line delta summaries and diff hunks.
+     * `client/daemon-client.ts`:
+       - Added `streamDiff`, `notifyFocusChange`, and `syncLaneShadow` wire emitters.
+   - `@nucleus/coordinator`:
+     * `server/coordinator-server.ts`:
+       - Handled `sharing:file_focus_change` to update in-memory registry and fan out focus events.
+       - Handled general `sharing:*` fanout to all active room peers.
+   - Integration tests in `packages/coordinator/src/server/sharing.integration.test.ts`:
+     * Verified `.nucleus/PEERS.md` generation and active file focus updates.
+     * Verified live cross-lane shadow sync without touching Git remotes.
+     * Verified workspace change detection and diff hunk generation.
+
+3. WHY BEHIND THE CHANGE
+   - Zero Git Friction for In-Progress Work: Teammates and their agents see API and component
+     structures taking shape in real time without creating throwaway Git commits.
+   - Passive Context Injection: AI coding tools cannot connect to arbitrary WebSocket feeds,
+     but naturally read workspace files. `.nucleus/PEERS.md` bridges the gap.
+
+4. FILES MODIFIED / CREATED
+   - [CREATE] packages/daemon/src/shadow/peers-index.ts
+   - [CREATE] packages/daemon/src/shadow/shadow-mirror.ts
+   - [CREATE] packages/daemon/src/watcher/diff-watcher.ts
+   - [MODIFY] packages/daemon/src/client/daemon-client.ts
+   - [MODIFY] packages/daemon/src/index.ts
+   - [MODIFY] packages/coordinator/src/server/coordinator-server.ts
+   - [CREATE] packages/coordinator/src/server/sharing.integration.test.ts
+   - [CREATE] logs/daemon/live_diff_streaming_and_shadows/milestone3_live_diffs_and_shadows_2026-11-23.txt
+
+5. TESTING & VERIFICATION
+   - 7 test files, 25 tests all passing (vitest run) in 2.15s.
+   - Monorepo `npm run build` succeeds cleanly across all 4 packages.
+
+6. NEXT STEPS
+   - Proceed to Milestone 4: Task Board Synchronizer (`tasks.json`) & Critique Gate Runner (git worktree checks + AI critic markdown output).
+================================================================================
