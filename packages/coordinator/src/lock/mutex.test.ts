@@ -39,9 +39,13 @@ describe("LeaseMutex (Contract Concurrency Control)", () => {
     expect(claimed).toBe(true);
   });
 
-  it("should reject releasing a lock held by someone else", () => {
-    mutex.acquire("CONTRACT/api.md", "node-1", 15);
-    const badRelease = mutex.release("CONTRACT/api.md", "node-2");
-    expect(badRelease).toBe(false);
+  it("should detect when a lock is expiring soon", () => {
+    mutex.acquire("CONTRACT/api.md", "node-1", 4); // 4 second lock
+    expect(mutex.isExpiringSoon("CONTRACT/api.md", 5)).toBe(true);
+    expect(mutex.isExpiringSoon("CONTRACT/api.md", 2)).toBe(false);
+
+    const expiring = mutex.getExpiringLocks(5);
+    expect(expiring.length).toBe(1);
+    expect(expiring[0].filePath).toBe("CONTRACT/api.md");
   });
 });

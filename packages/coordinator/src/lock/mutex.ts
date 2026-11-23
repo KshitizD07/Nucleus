@@ -41,4 +41,22 @@ export class LeaseMutex {
     }
     return existing;
   }
+
+  public isExpiringSoon(filePath: string, thresholdSeconds: number = 5): boolean {
+    const lock = this.getLock(filePath);
+    if (!lock) return false;
+    const remainingMs = lock.expiresAt - Date.now();
+    return remainingMs > 0 && remainingMs <= thresholdSeconds * 1000;
+  }
+
+  public getExpiringLocks(thresholdSeconds: number = 5): LeaseLock[] {
+    const expiring: LeaseLock[] = [];
+    const now = Date.now();
+    for (const [path, lock] of this.locks) {
+      if (lock.expiresAt > now && lock.expiresAt - now <= thresholdSeconds * 1000) {
+        expiring.push(lock);
+      }
+    }
+    return expiring;
+  }
 }
