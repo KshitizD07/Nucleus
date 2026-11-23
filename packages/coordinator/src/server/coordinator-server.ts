@@ -152,7 +152,17 @@ export class CoordinatorServer {
         return;
       }
 
-      // Fan out all other messages (diff streams, task events, etc.)
+      if (envelope.type === "sharing:file_focus_change") {
+        const focus = envelope.payload as { lane: string; file_path: string; action: "editing" | "idle" | "saved" };
+        this.registry.updateHeartbeat(node_id, {
+          active_file: focus.action === "idle" ? null : focus.file_path,
+          status: focus.action === "editing" ? "active" : "idle"
+        });
+        this.broadcast(envelope, node_id);
+        return;
+      }
+
+      // Fan out all other messages (diff streams, task events, lane shadow syncs, etc.)
       this.broadcast(envelope, node_id);
     } catch {
       // Silently drop malformed messages
