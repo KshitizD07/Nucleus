@@ -1,0 +1,68 @@
+================================================================================
+SESSION LOG: Milestone 4 — Task Board Lifecycle & Disposable Worktree Critique Pipeline
+================================================================================
+Date       : 2026-11-23
+Domain     : critic
+Feature    : worktree_gate_and_taskboard
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Implement Milestone 4 of the Nucleus architecture:
+     * Task board state machine (`TaskBoardManager` in coordinator) with JSON persistence.
+     * Task board local replication (`TaskBoardReplica` in daemon).
+     * Wire handlers for `task:claim` and `task:status` synchronization.
+     * Disposable Git worktree isolation (`WorktreeManager` in critic) ensuring the Initiator's
+       working tree is never polluted during peer reviews.
+     * Deterministic check execution (`DeterministicRunner` in critic) for linting, compilation, and tests.
+     * Structured markdown critique generation (`MarkdownCritiqueFormatter` in critic) formatted
+       for local AI agent ingestion (`.nucleus/critiques/<task-id>.md`).
+     * End-to-end integration test validating the entire task claim and evaluation pipeline.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - `@nucleus/coordinator`:
+     * `task/task-board.ts`: In-memory task registry with `tasks.json` persistence and status transitions.
+     * `server/coordinator-server.ts`:
+       - Handled `task:claim` message, verified exclusivity, logged event, broadcasted `task:status`.
+       - Handled `task:status` update message (moving from `active` -> `in_review` -> `approved`),
+         persisted to disk, and broadcasted to all room peers.
+   - `@nucleus/daemon`:
+     * `task/task-replica.ts`: Jail-safe replica syncing `.nucleus/tasks.json` locally.
+     * `client/daemon-client.ts`: Added `claimTask` and `updateTaskStatus` methods.
+   - `@nucleus/critic`:
+     * `worktree/worktree-manager.ts`: Uses `git worktree add --detach` and `git worktree remove --force`
+       to spin up isolated disposable checkouts of contributor branches.
+     * `runner/deterministic-runner.ts`: Runs arbitrary command suites (lint, build, tests) with
+       wall-clock timeouts and captured stdout/stderr.
+     * `reviewer/formatter.ts`: Renders Markdown critique findings.
+   - Integration test in `packages/coordinator/src/server/critique.integration.test.ts`:
+     * Verified task claim and broadcast to peer daemon.
+     * Verified git worktree checkout creation, command execution, critique formatting, and clean worktree teardown.
+
+3. WHY BEHIND THE CHANGE
+   - Zero Working Tree Pollution: Checking out contributor PR branches directly on the Initiator's
+     machine disrupts ongoing local work and risks unstaged file loss. Git worktrees solve this
+     with disposable, zero-copy checkouts.
+   - Pull-Model Critique: Generating a markdown artifact in `.nucleus/critiques/` allows the contributor's
+     local AI agent to fix issues autonomously by simply reading the file.
+
+4. FILES MODIFIED / CREATED
+   - [CREATE] packages/coordinator/src/task/task-board.ts
+   - [MODIFY] packages/coordinator/src/server/coordinator-server.ts
+   - [MODIFY] packages/coordinator/src/index.ts
+   - [CREATE] packages/daemon/src/task/task-replica.ts
+   - [MODIFY] packages/daemon/src/client/daemon-client.ts
+   - [MODIFY] packages/daemon/src/index.ts
+   - [CREATE] packages/critic/src/worktree/worktree-manager.ts
+   - [CREATE] packages/critic/src/runner/deterministic-runner.ts
+   - [MODIFY] packages/critic/src/index.ts
+   - [CREATE] packages/coordinator/src/server/critique.integration.test.ts
+   - [CREATE] logs/critic/worktree_gate_and_taskboard/milestone4_worktree_gate_taskboard_2026-11-23.txt
+
+5. TESTING & VERIFICATION
+   - 8 test files, 27 tests all passing (vitest run) in 2.26s.
+   - Monorepo `npm run build` succeeds cleanly across all 4 packages.
+
+6. NEXT STEPS
+   - Milestone 5: Developer CLI & TUI entrypoints (`nucleus init`, `nucleus join`) to run end-to-end dogfooding on real projects (Opendoor).
+================================================================================
