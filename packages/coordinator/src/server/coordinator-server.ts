@@ -57,6 +57,14 @@ export class CoordinatorServer {
     return this.taskBoard;
   }
 
+  public getContractStore(): ContractStore {
+    return this.contractStore;
+  }
+
+  public getMutex(): LeaseMutex {
+    return this.mutex;
+  }
+
   public start(): void {
     this.wss.on("connection", (ws) => this.handleConnection(ws));
     this.heartbeatTimer = setInterval(() => this.evictStaleNodes(), 10_000);
