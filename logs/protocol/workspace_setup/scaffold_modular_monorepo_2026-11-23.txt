@@ -1,0 +1,65 @@
+================================================================================
+SESSION LOG: Scaffold Modular Monorepo Packages and Protocol Foundation
+================================================================================
+Date       : 2026-11-23
+Domain     : protocol
+Feature    : workspace_setup
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Transition the Nucleus architectural concept into a clean, scalable, and modular
+     monorepo codebase using native npm workspaces, TypeScript 5.7 (ESM/NodeNext),
+     and Zod runtime validation.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - Initialized root `package.json` with native `workspaces: ["packages/*"]` and shared
+     compiler configuration `tsconfig.base.json`.
+   - Scaffolded 4 decoupled packages:
+     * `packages/protocol`: Central Zod schemas and TypeScript types defining message
+       envelopes, contract leases, taskboard states, live diff streams, and critique results.
+     * `packages/daemon`: The `sphere-node` client containing workspace path jailing
+       and future diff watchers.
+     * `packages/coordinator`: The room coordinator containing lease-based mutex locking
+       (15s TTL) and session state managers.
+     * `packages/critic`: The review generator producing markdown critique artifacts.
+   - Built the packages cleanly with `npm run build` using zero circular dependencies.
+   - Created `.gitignore` ignoring build artifacts (`dist/`) and dependencies (`node_modules/`).
+
+3. WHY BEHIND THE CHANGE
+   - Strict Separation of Concerns: Keeps the protocol wire format independent from daemon
+     and coordinator implementations, allowing future transport migrations (e.g., P2P) without
+     affecting message contracts.
+   - Contributor Security & Footprint: Contributors only need to install `@nucleus/daemon`;
+     coordinator and critique runner dependencies are kept isolated.
+
+4. WHY NOT THE ALTERNATIVE(S)
+   - Alternative 1: Single monolith package
+     * Why Rejected: Forces contributors to bundle coordinator and testing libraries; violates
+       the client/server separation of the multiplayer architecture.
+   - Alternative 2: Separate GitHub repositories for each package
+     * Why Rejected: Creates massive version-sync friction during early MVP iterations when
+       protocol schemas evolve frequently.
+
+5. FILES MODIFIED / CREATED
+   - [CREATE] package.json
+   - [CREATE] tsconfig.base.json
+   - [CREATE] .gitignore
+   - [CREATE] packages/protocol/package.json, tsconfig.json, src/*
+   - [CREATE] packages/daemon/package.json, tsconfig.json, src/*
+   - [CREATE] packages/coordinator/package.json, tsconfig.json, src/*
+   - [CREATE] packages/critic/package.json, tsconfig.json, src/*
+   - [CREATE] logs/protocol/workspace_setup/scaffold_modular_monorepo_2026-11-23.txt
+
+6. PROTOCOL / API / EVENT CHANGES
+   - Implemented `MessageEnvelopeSchema`, `ContractLockRequestSchema`, `TaskItemSchema`,
+     `LiveDiffStreamSchema`, and `CriticResultSchema`.
+
+7. TESTING & VERIFICATION
+   - Executed `npm install` and `npm run build`. Verified successful compilation across
+     all 4 workspaces.
+
+8. NEXT STEPS / OPEN ITEMS
+   - Implement WebSocket client/server transport between daemon and coordinator.
+   - Implement the file-watcher for live diff streaming in `@nucleus/daemon`.
+================================================================================
