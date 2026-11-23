@@ -5,13 +5,16 @@ import {
   MessageEnvelopeSchema,
   ContractLockRequestSchema,
   ContractLockReleaseSchema,
-  ContractUpdateRequestSchema
+  ContractUpdateRequestSchema,
+  TaskClaimSchema,
+  TaskStatusUpdateSchema
 } from "@nucleus/protocol";
 import { NodeRegistry } from "../state/node-registry.js";
 import { LeaseMutex } from "../lock/mutex.js";
 import { EventLog } from "../state/event-log.js";
 import { InviteStore } from "../state/invite-store.js";
 import { ContractStore } from "../state/contract-store.js";
+import { TaskBoardManager } from "../task/task-board.js";
 import { buildMessage } from "./message-builder.js";
 
 export interface CoordinatorOptions {
@@ -19,6 +22,7 @@ export interface CoordinatorOptions {
   roomId: string;
   logDir: string;
   contractDir?: string;
+  taskDir?: string;
 }
 
 export class CoordinatorServer {
@@ -28,6 +32,7 @@ export class CoordinatorServer {
   private readonly eventLog: EventLog;
   private readonly invites: InviteStore;
   private readonly contractStore: ContractStore;
+  private readonly taskBoard: TaskBoardManager;
   private readonly sockets: Map<string, WebSocket>;
   private readonly roomId: string;
   private heartbeatTimer: NodeJS.Timeout | null = null;
@@ -39,12 +44,17 @@ export class CoordinatorServer {
     this.eventLog = new EventLog(options.logDir, options.roomId);
     this.invites = new InviteStore();
     this.contractStore = new ContractStore(options.contractDir ?? "./CONTRACT");
+    this.taskBoard = new TaskBoardManager(options.taskDir ?? options.logDir);
     this.sockets = new Map();
     this.wss = new WebSocketServer({ port: options.port });
   }
 
   public issueInvite(lane: string): string {
     return this.invites.issue(lane);
+  }
+
+  public getTaskBoard(): TaskBoardManager {
+    return this.taskBoard;
   }
 
   public start(): void {
@@ -152,6 +162,16 @@ export class CoordinatorServer {
         return;
       }
 
+      if (envelope.type === "task:claim") {
+        this.handleTaskClaim(node_id, ws, envelope.payload);
+        return;
+      }
+
+      if (envelope.type === "task:status") {
+        this.handleTaskStatusUpdate(node_id, envelope.payload);
+        return;
+      }
+
       if (envelope.type === "sharing:file_focus_change") {
         const focus = envelope.payload as { lane: string; file_path: string; action: "editing" | "idle" | "saved" };
         this.registry.updateHeartbeat(node_id, {
@@ -215,6 +235,31 @@ export class CoordinatorServer {
       }),
       node_id
     );
+  }
+
+  private handleTaskClaim(node_id: string, ws: WebSocket, payload: unknown): void {
+    const claim = TaskClaimSchema.parse(payload);
+    const result = this.taskBoard.claimTask(claim.task_id, node_id);
+
+    if (result.success && result.task) {
+      this.eventLog.append("task_claimed", { task_id: claim.task_id, node_id });
+      this.broadcast(buildMessage(this.roomId, "coordinator", "task:status", result.task));
+    } else {
+      ws.send(JSON.stringify(buildMessage(this.roomId, "coordinator", "task:claim_failed", {
+        task_id: claim.task_id,
+        reason: result.reason
+      })));
+    }
+  }
+
+  private handleTaskStatusUpdate(node_id: string, payload: unknown): void {
+    const update = TaskStatusUpdateSchema.parse(payload);
+    const result = this.taskBoard.updateStatus(update.task_id, update.status, update.branch);
+
+    if (result.success && result.task) {
+      this.eventLog.append("task_status_changed", { task_id: update.task_id, status: update.status, node_id });
+      this.broadcast(buildMessage(this.roomId, "coordinator", "task:status", result.task));
+    }
   }
 
   private handleDisconnect(node_id: string): void {
