@@ -5,7 +5,7 @@ import {
   MessageEnvelopeSchema,
   ContractLockRequestSchema,
   ContractLockReleaseSchema,
-  ContractUpdateBroadcastSchema
+  ContractUpdateRequestSchema
 } from "@nucleus/protocol";
 import { NodeRegistry } from "../state/node-registry.js";
 import { LeaseMutex } from "../lock/mutex.js";
@@ -187,7 +187,7 @@ export class CoordinatorServer {
   }
 
   private handleContractUpdate(node_id: string, payload: unknown): void {
-    const update = ContractUpdateBroadcastSchema.parse(payload);
+    const update = ContractUpdateRequestSchema.parse(payload);
 
     // Only the lock holder may publish an update
     const lock = this.mutex.getLock(update.file_path);

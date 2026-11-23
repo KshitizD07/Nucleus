@@ -68,7 +68,6 @@ export class DaemonClient {
   public publishContractUpdate(filePath: string, content: string, touchedSections: string[] = []): void {
     this.send("contract:update", {
       file_path: filePath,
-      version: 0, // Coordinator computes and bumps authoritative version
       content,
       touched_sections: touchedSections
     });
