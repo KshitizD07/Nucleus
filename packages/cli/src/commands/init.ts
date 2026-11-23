@@ -43,6 +43,30 @@ export class InitRunner {
       );
     }
 
+    // Ensure sample tasks backlog exists if .nucleus/tasks.json is empty
+    const tasksFile = path.join(nucleusDir, "tasks.json");
+    if (!fs.existsSync(tasksFile)) {
+      const sampleTasks = [
+        {
+          id: "task-backend-01",
+          title: "Implement core backend API endpoints",
+          lane: "backend",
+          status: "unassigned",
+          assigned_to: null,
+          depends_on_contracts: ["CONTRACT/api.md"]
+        },
+        {
+          id: "task-frontend-01",
+          title: "Build frontend client components",
+          lane: "frontend",
+          status: "unassigned",
+          assigned_to: null,
+          depends_on_contracts: ["CONTRACT/api.md"]
+        }
+      ];
+      fs.writeFileSync(tasksFile, JSON.stringify(sampleTasks, null, 2), "utf8");
+    }
+
     this.coordinator = new CoordinatorServer({
       port: this.port,
       roomId: this.roomId,

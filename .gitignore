@@ -7,4 +7,6 @@ dist/
 .nucleus/
 test_logs*/
 test_reconnect_logs*/
+LOCAL_OPERATIONS_AND_TESTING_GUIDE.md
+docs/LOCAL_OPERATIONS_AND_TESTING_GUIDE.md
 
