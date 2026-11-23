@@ -1,6 +1,19 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { CoordinatorServer } from "@nucleus/coordinator";
+
+export function getLocalIp(): string {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name] || []) {
+      if (iface.family === "IPv4" && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return "localhost";
+}
 
 export interface InitRunnerOptions {
   port?: number;
@@ -24,6 +37,7 @@ export class InitRunner {
     coordinator: CoordinatorServer;
     inviteCommand: (lane: string, hostUrl?: string) => string;
     tunnelGuidance: string;
+    localIp: string;
   } {
     const nucleusDir = path.join(this.workspaceRoot, ".nucleus");
     const contractDir = path.join(this.workspaceRoot, "CONTRACT");
@@ -83,23 +97,27 @@ export class InitRunner {
     console.log(`Bound to workspace: ${this.workspaceRoot}`);
     console.log(`======================================================\n`);
 
-    const inviteCommand = (lane: string, hostUrl = `ws://localhost:${this.port}`): string => {
+    const localIp = getLocalIp();
+
+    const inviteCommand = (lane: string, hostUrl?: string): string => {
       if (!this.coordinator) throw new Error("Coordinator not running");
+      const url = hostUrl || (localIp !== "localhost" ? `ws://${localIp}:${this.port}` : `ws://localhost:${this.port}`);
       const token = this.coordinator.issueInvite(lane);
-      return `nucleus join --url ${hostUrl} --token ${token} --lane ${lane}`;
+      return `nucleus join --url ${url} --token ${token} --lane ${lane}`;
     };
 
     const tunnelGuidance = [
-      "🌐 WAN / Internet Access Options (No Port Forwarding Required):",
+      "🌐 Over the Internet / Remote (No Port Forwarding Required):",
       `   1. Cloudflare Tunnel : cloudflared tunnel --url ws://localhost:${this.port}`,
-      `   2. Tailscale VPN     : nucleus join --url ws://<tailscale-ip>:${this.port} ...`,
+      `   2. Tailscale VPN     : nucleus join --url ws://<your-tailscale-ip>:${this.port} ...`,
       `   3. Ngrok             : ngrok http ${this.port}`
     ].join("\n");
 
     return {
       coordinator: this.coordinator,
       inviteCommand,
-      tunnelGuidance
+      tunnelGuidance,
+      localIp
     };
   }
 

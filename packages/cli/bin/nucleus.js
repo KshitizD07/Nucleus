@@ -26,12 +26,20 @@ if (cli.command === "tasks") {
     workspaceRoot: cli.workspace
   });
 
-  const { inviteCommand, tunnelGuidance } = runner.start();
+  const { inviteCommand, tunnelGuidance, localIp } = runner.start();
 
-  console.log("Sample invite commands for teammates (Local LAN):\n");
-  console.log(`  Frontend :  ${inviteCommand("frontend")}`);
-  console.log(`  Backend  :  ${inviteCommand("backend")}`);
-  console.log(`  QA / DB  :  ${inviteCommand("qa")}\n`);
+  console.log("Sample invite commands for teammates:\n");
+  if (localIp && localIp !== "localhost") {
+    console.log(`  📡 Friend on Same Wi-Fi / Local Network (${localIp}):`);
+    console.log(`    Frontend :  ${inviteCommand("frontend")}`);
+    console.log(`    Backend  :  ${inviteCommand("backend")}`);
+    console.log(`    QA / DB  :  ${inviteCommand("qa")}\n`);
+  }
+
+  console.log(`  💻 Same Machine (Localhost):`);
+  console.log(`    Frontend :  ${inviteCommand("frontend", `ws://localhost:${cli.port || 9876}`)}`);
+  console.log(`    Backend  :  ${inviteCommand("backend", `ws://localhost:${cli.port || 9876}`)}\n`);
+
   if (tunnelGuidance) {
     console.log(tunnelGuidance + "\n");
   }
