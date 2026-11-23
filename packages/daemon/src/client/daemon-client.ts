@@ -11,11 +11,16 @@ export interface DaemonClientOptions {
   workspace_path: string;
   lane: string;
   heartbeatIntervalMs?: number;
+  autoReconnect?: boolean;
+  maxReconnectIntervalMs?: number;
 }
 
 export class DaemonClient {
   private ws: WebSocket | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private isSevered: boolean = false;
+  private reconnectAttempts: number = 0;
   private status: DaemonStatus = "idle";
   private activeFile: string | null = null;
   private contractVersion: number = 0;
@@ -25,21 +30,45 @@ export class DaemonClient {
   public onSnapshot?: (snapshot: RoomSnapshotPayload) => void;
   public onMessage?: (type: string, payload: unknown) => void;
   public onDisconnect?: (reason: string) => void;
+  public onReconnect?: () => void;
 
   constructor(options: DaemonClientOptions) {
-    this.options = { heartbeatIntervalMs: 2000, ...options };
+    this.options = {
+      heartbeatIntervalMs: 2000,
+      autoReconnect: true,
+      maxReconnectIntervalMs: 30_000,
+      ...options
+    };
   }
 
   public connect(): Promise<void> {
+    this.isSevered = false;
     return new Promise((resolve, reject) => {
+      this.initiateConnection(resolve, reject);
+    });
+  }
+
+  private initiateConnection(onInitialSuccess?: () => void, onInitialFail?: (err: Error) => void): void {
+    if (this.isSevered) return;
+
+    try {
       this.ws = new WebSocket(this.options.url);
 
       this.ws.once("open", () => {
+        this.reconnectAttempts = 0;
         this.sendHello();
-        resolve();
+        if (onInitialSuccess) {
+          onInitialSuccess();
+        } else {
+          this.onReconnect?.();
+        }
       });
 
-      this.ws.once("error", reject);
+      this.ws.once("error", (err) => {
+        if (onInitialFail) {
+          onInitialFail(err);
+        }
+      });
 
       this.ws.on("message", (raw) => this.handleMessage(raw.toString()));
 
@@ -48,11 +77,45 @@ export class DaemonClient {
         const msg = reason?.toString() ?? "unknown";
         console.log(`[Daemon] Disconnected: ${code} - ${msg}`);
         this.onDisconnect?.(msg);
+
+        // If not intentional sever and autoReconnect is enabled, schedule retry
+        if (!this.isSevered && this.options.autoReconnect && code !== 1000 && code !== 4003) {
+          this.scheduleReconnect();
+        }
       });
-    });
+    } catch (err: any) {
+      if (onInitialFail) {
+        onInitialFail(err);
+      } else {
+        this.scheduleReconnect();
+      }
+    }
+  }
+
+  private scheduleReconnect(): void {
+    if (this.isSevered || this.reconnectTimer) return;
+
+    this.reconnectAttempts++;
+    // Exponential backoff: 500ms, 1000ms, 2000ms, up to maxReconnectIntervalMs
+    const delay = Math.min(
+      500 * Math.pow(2, this.reconnectAttempts - 1),
+      this.options.maxReconnectIntervalMs
+    );
+
+    console.log(`[Daemon] Connection lost. Reconnecting in ${delay}ms (attempt #${this.reconnectAttempts})...`);
+
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.initiateConnection();
+    }, delay);
   }
 
   public sever(): void {
+    this.isSevered = true;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     this.stopHeartbeat();
     this.ws?.close(1000, "user_exit");
   }
