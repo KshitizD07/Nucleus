@@ -44,6 +44,7 @@ Responsibilities:
 - **Contract sync:** maintains a local replica of `CONTRACT/` — applies broadcasts, enforces the lock protocol, and alerts the contributor if their local workspace is editing locked files without a lease.
 - **Task board sync:** reflects lane assignments, task state, and dependency notifications locally.
 - **Live Code & Diff Streaming (Sharing Layer):** Monitors local file system / Git working tree changes. While the human's agent is editing, `sphere-node` streams lightweight live diffs and active file events to the room coordinator so teammates can see code changes and API shapes emerge in real time.
+- **Cross-Lane Shadow Mirror (`.nucleus/shadows/<lane>/`):** Allows a developer (or their local AI agent) in one lane (e.g. backend) to inspect the live, uncommitted files of another lane (e.g. frontend) directly on disk without requiring GitHub pushes or git branch switching. The daemon serves read requests and syncs active files into a read-only local mirror.
 - **Heartbeat & activity reporting:** emits liveness, active task status, and current editing focus every 2s.
 - **Local sever switch:** terminates room connection and stops all network sync immediately upon user exit or interrupt.
 

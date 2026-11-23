@@ -78,12 +78,13 @@ Instead, Nucleus uses an unprivileged **file-based pull model**:
 Dropping central terminal steering does **not** mean working in silos. Nucleus delivers true live collaboration:
 
 1. **Live Work-in-Progress Diff Streaming**: As an agent or human writes code, `sphere-node` streams file-touch events and incremental diffs to the room feed. Everyone sees schemas, types, and logic take shape in real time.
-2. **The Living Contract (`CONTRACT/`)**: Foundational files (DB schema, OpenAPI endpoints, Socket events) require a short lease-based lock to modify. Once updated, changes are broadcast instantly to all dependent lanes.
-3. **The Critique Gate**: When a task is marked `in_review`:
+2. **Cross-Lane Shadow Mirror (`.nucleus/shadows/<lane>/`)**: When a backend engineer needs to inspect how the frontend is calling an endpoint, they don't wait for a git commit or push to GitHub. The daemon maintains a read-only local shadow directory of active peer lanes. The backend engineer's local AI agent can directly read `.nucleus/shadows/frontend/src/api/auth.ts` live.
+3. **The Living Contract (`CONTRACT/`)**: Foundational files (DB schema, OpenAPI endpoints, Socket events) require a short lease-based lock to modify. Once updated, changes are broadcast instantly to all dependent lanes.
+4. **The Critique Gate**: When a task is marked `in_review`:
    - Stage 1: Deterministic checks (lint, types, tests, secret-scan) run in a clean Git worktree.
    - Stage 2: Initiator AI critic reviews the diff against the original spec and writes structured findings to `.nucleus/critiques/<task-id>.md`.
    - The contributor tells their local CLI: `claude "Address issues in .nucleus/critiques/auth.md"`.
-4. **Git Stays the Source of Truth**: The room never has write access to the central repository. The engineer who wrote the code reviews the final diff and pushes their own Git commit.
+5. **Git Stays the Source of Truth**: The room never has write access to the central repository. The engineer who wrote the code reviews the final diff and pushes their own Git commit.
 
 ---
 
