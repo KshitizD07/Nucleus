@@ -1,0 +1,68 @@
+================================================================================
+SESSION LOG: Milestone 1 — WebSocket Coordinator Server and Daemon Client
+================================================================================
+Date       : 2026-11-23
+Domain     : coordinator
+Feature    : websocket_server
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Implement the full Milestone 1 of the Nucleus network layer:
+     * Session schemas for hello/room_snapshot/heartbeat/severed.
+     * Coordinator WebSocket server with room join, heartbeat management, and stale-node eviction.
+     * Daemon WebSocket client with auto-heartbeat and sever support.
+     * Integration test verifying full join handshake round-trip and token rejection.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - `@nucleus/protocol` additions:
+     * `session.ts`: HelloPayloadSchema, RoomSnapshotPayloadSchema, HeartbeatPayloadSchema, SeveredPayloadSchema.
+   - `@nucleus/coordinator` additions:
+     * `state/event-log.ts`: Append-only JSONL log with crash-replay (EventLog class).
+     * `state/node-registry.ts`: In-memory peer map with heartbeat staleness eviction (NodeRegistry class).
+     * `state/invite-store.ts`: Single-use, TTL-based join tokens (InviteStore class).
+     * `server/message-builder.ts`: Typed envelope factory (buildMessage).
+     * `server/coordinator-server.ts`: Full WS server - join handshake, heartbeat, fanout broadcast, stale eviction.
+   - `@nucleus/daemon` additions:
+     * `client/daemon-client.ts`: WS client with hello handshake, auto-heartbeat, status tracking, sever.
+   - Integration test: `coordinator.integration.test.ts` verifies join and token rejection paths.
+
+3. WHY BEHIND THE CHANGE
+   - Single-use tokens and consume-on-use pattern prevent replay attacks against room join.
+   - JSONL append-only event log enables coordinator crash recovery without a database.
+   - Heartbeat-based eviction (20s timeout) ensures stale nodes release contract leases automatically.
+   - Daemon never spawns or wraps user CLI — all network activity is room-side coordination only.
+
+4. WHY NOT THE ALTERNATIVE(S)
+   - Alternative: Session tokens persisted to DB
+     * Why Rejected: Adds infrastructure complexity before proving the network layer. JSONL replay
+       handles crash recovery adequately for Phase 1.
+   - Alternative: Persistent TCP or HTTP long-polling
+     * Why Rejected: WebSocket provides native bi-directional framing suited for real-time
+       event fanout without HTTP overhead on each message.
+
+5. FILES MODIFIED / CREATED
+   - [CREATE] packages/protocol/src/session.ts
+   - [MODIFY] packages/protocol/src/index.ts
+   - [CREATE] packages/coordinator/src/state/event-log.ts
+   - [CREATE] packages/coordinator/src/state/node-registry.ts
+   - [CREATE] packages/coordinator/src/state/invite-store.ts
+   - [CREATE] packages/coordinator/src/server/message-builder.ts
+   - [CREATE] packages/coordinator/src/server/coordinator-server.ts
+   - [MODIFY] packages/coordinator/src/index.ts
+   - [CREATE] packages/daemon/src/client/daemon-client.ts
+   - [MODIFY] packages/daemon/src/index.ts
+   - [CREATE] packages/coordinator/src/server/coordinator.integration.test.ts
+   - [CREATE] logs/coordinator/websocket_server/milestone1_ws_coordinator_daemon_2026-11-23.txt
+
+6. PROTOCOL / API / EVENT CHANGES
+   - Implemented: session:hello, session:room_snapshot, session:heartbeat, session:severed, session:peer_joined.
+
+7. TESTING & VERIFICATION
+   - 7 test files, 29 tests all passing (vitest run) in 671ms.
+   - Full monorepo `npm run build` clean.
+
+8. NEXT STEPS
+   - Implement contract sync: broadcast on file change, lease lock protocol over the wire.
+   - Implement live diff stream watcher in `@nucleus/daemon`.
+================================================================================
