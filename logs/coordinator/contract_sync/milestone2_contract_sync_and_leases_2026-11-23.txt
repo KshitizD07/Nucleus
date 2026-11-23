@@ -1,0 +1,70 @@
+================================================================================
+SESSION LOG: Milestone 2 — Contract Synchronization, Lease Locks, and Replicas
+================================================================================
+Date       : 2026-11-23
+Domain     : coordinator
+Feature    : contract_sync
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Implement Milestone 2 of the Nucleus architecture:
+     * Full lease-based mutual exclusion over the wire (lock_req, lock_grant, lock_denied, lock_release).
+     * Authoritative version-tracked ContractStore on coordinator with disk persistence for crash recovery.
+     * Jail-safe ContractReplica on daemon with version monotonicity enforcement.
+     * ContractUpdateRequest and broadcast pipeline fanning out to all active peers.
+     * Debounced ContractWatcher detecting local contract file edits.
+     * End-to-end integration tests proving mutual exclusion and real-time broadcast replication.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - `@nucleus/protocol`:
+     * Added `ContractUpdateRequestSchema` (author node sends path, content, touched sections without version).
+     * `ContractUpdateBroadcastSchema` carries the coordinator-minted monotonically increasing version.
+   - `@nucleus/coordinator`:
+     * `state/contract-store.ts`: In-memory map + disk persistence (`CONTRACT/`) enabling crash recovery.
+     * `server/coordinator-server.ts`:
+       - Handled `contract:lock_req`: checks `LeaseMutex`, replies `contract:lock_grant` or `contract:lock_denied`.
+       - Handled `contract:lock_release`: releases held lease, logs event.
+       - Handled `contract:update`: ensures node holds active lease, bumps version, records event, fans out `contract:update` broadcast.
+   - `@nucleus/daemon`:
+     * `contract/contract-replica.ts`: Jail-safe writer validating `version > currentVersion` before applying.
+     * `client/daemon-client.ts`: Added `requestContractLock`, `releaseContractLock`, `publishContractUpdate`.
+     * `contract/contract-watcher.ts`: Debounced (300ms) file watcher for local `CONTRACT/` folder.
+   - Integration tests in `contract-sync.integration.test.ts`:
+     * Verified lock granted to node 1 and denied to node 2 on the same contract.
+     * Verified update broadcast received by node 2 and correctly persisted in node 2's local replica.
+
+3. WHY BEHIND THE CHANGE
+   - Central Contract Mutex: Guarantees no two lanes diverge on shared APIs or database schemas simultaneously.
+   - Monotonic Versioning: Coordinator serves as single source of truth for versions, rejecting stale updates.
+   - Jail Containment: Ensures incoming broadcast updates never write outside the workspace jail.
+
+4. WHY NOT THE ALTERNATIVE(S)
+   - Alternative: Git branch merge for contract updates
+     * Why Rejected: Merging a Git branch takes minutes; contract synchronization needs sub-second latency
+       so parallel builders don't write code against obsolete schemas.
+   - Alternative: Permanent lock until manual release
+     * Why Rejected: If a contributor's machine crashes or disconnects while editing a contract, the room
+       would deadlock. 15-second renewable leases solve this safely.
+
+5. FILES MODIFIED / CREATED
+   - [CREATE] packages/coordinator/src/state/contract-store.ts
+   - [MODIFY] packages/coordinator/src/server/coordinator-server.ts
+   - [MODIFY] packages/protocol/src/contract.ts
+   - [CREATE] packages/daemon/src/contract/contract-replica.ts
+   - [CREATE] packages/daemon/src/contract/contract-watcher.ts
+   - [MODIFY] packages/daemon/src/client/daemon-client.ts
+   - [MODIFY] packages/daemon/src/index.ts
+   - [CREATE] packages/coordinator/src/server/contract-sync.integration.test.ts
+   - [CREATE] logs/coordinator/contract_sync/milestone2_contract_sync_and_leases_2026-11-23.txt
+
+6. PROTOCOL / API / EVENT CHANGES
+   - Implemented: `contract:lock_req`, `contract:lock_grant`, `contract:lock_denied`, `contract:lock_release`, `contract:update`.
+
+7. TESTING & VERIFICATION
+   - 5 test files, 19 tests all passing (vitest run) in 728ms.
+   - Full monorepo `npm run build` succeeds cleanly.
+
+8. NEXT STEPS
+   - Milestone 3: Live Diff Streaming & Cross-Lane Shadow Mirror (`.nucleus/shadows/` and `.nucleus/PEERS.md`).
+================================================================================
