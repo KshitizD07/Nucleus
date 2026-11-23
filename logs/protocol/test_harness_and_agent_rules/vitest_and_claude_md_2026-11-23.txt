@@ -1,0 +1,49 @@
+================================================================================
+SESSION LOG: Setup Agent Instructions (CLAUDE.md) and Test Harness (Vitest)
+================================================================================
+Date       : 2026-11-23
+Domain     : protocol
+Feature    : test_harness_and_agent_rules
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Finalize developer and AI agent readiness before commencing core network feature
+     development. Establish root agent operating guidelines (`CLAUDE.md`), install
+     Vitest as the unified testing harness, and implement unit tests across the protocol,
+     coordinator lease mutex, and daemon path jail.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - Created `CLAUDE.md` defining strict architectural invariants:
+     * Enforced the Pure Pull Model (never spawn/drive user CLIs).
+     * Enforced credential immobility (zero secrets over the wire).
+     * Mandated path jail validation and Zod single-source-of-truth rules.
+     * Enforced Opendoor semantic commit formatting and session logging.
+   - Installed `vitest` in root devDependencies and configured `package.json` scripts (`npm test`).
+   - Implemented 3 initial test suites:
+     * `packages/protocol/src/protocol.test.ts`: Tests envelope validation, TTL bounds, and live diff parsing.
+     * `packages/coordinator/src/lock/mutex.test.ts`: Verifies mutual exclusion, lease renewal, and safe release.
+     * `packages/daemon/src/jail/jail.test.ts`: Verifies directory containment and path traversal rejection.
+   - Executed test suite (12/12 tests passing).
+
+3. WHY BEHIND THE CHANGE
+   - Agent Self-Alignment: AI coding assistants naturally read `CLAUDE.md` to self-govern their edits.
+   - Regression Safety: Having fast unit tests in place ensures network transport additions won't break
+     core concurrency and security invariants.
+
+4. FILES MODIFIED / CREATED
+   - [CREATE] CLAUDE.md
+   - [MODIFY] package.json, package-lock.json
+   - [CREATE] packages/protocol/src/protocol.test.ts
+   - [CREATE] packages/coordinator/src/lock/mutex.test.ts
+   - [CREATE] packages/daemon/src/jail/jail.test.ts
+   - [CREATE] logs/protocol/test_harness_and_agent_rules/vitest_and_claude_md_2026-11-23.txt
+
+5. TESTING & VERIFICATION
+   - Executed `npm test` -> 3 test files, 12 tests passed in 377ms.
+   - Executed `npm run build` -> Clean TypeScript build across all packages.
+
+6. NEXT STEPS
+   - Begin Phase 1 Milestone: Implement the WebSocket Coordinator Server (`@nucleus/coordinator`)
+     and Daemon Client (`@nucleus/daemon`).
+================================================================================

@@ -8,11 +8,13 @@
   ],
   "scripts": {
     "build": "npm run --workspaces --if-present build",
-    "test": "npm run --workspaces --if-present test",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "npm run --workspaces --if-present lint"
   },
   "devDependencies": {
     "@types/node": "^22.10.1",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^5.1.1"
   }
 }
