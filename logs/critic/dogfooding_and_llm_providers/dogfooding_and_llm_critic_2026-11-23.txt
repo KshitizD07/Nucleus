@@ -1,0 +1,93 @@
+================================================================================
+SESSION LOG: Production LLM Critic Providers, Template Customization & Dogfooding Simulation
+================================================================================
+Date       : 2026-11-23
+Domain     : critic
+Feature    : dogfooding_and_llm_providers
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Implement the remaining production features and real-world edge case solutions
+     specified in `docs/real-world-scenarios-and-edge-cases.md`:
+     1. Live generative LLM providers (`GeminiCriticProvider`, `AnthropicCriticProvider`,
+        and `AutoLLMCriticProvider`) in `@nucleus/critic` for Stage 2 architectural review.
+     2. Dynamic project-specific guidance template customization in `PeersIndexManager`
+        via `CONTRACT/peers.template.md` (or `.nucleus/peers.template.md`).
+     3. WAN NAT traversal and tunnel options guidance (Cloudflare Tunnel, Tailscale, Ngrok)
+        displayed in `InitRunner` and `nucleus init`.
+     4. Comprehensive multi-lane dogfooding integration simulation (`dogfooding-simulation.test.ts`)
+        exercising the full room lifecycle between Initiator, Backend, and Frontend.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - LLM Critic Provider Suite:
+     * Created `GeminiCriticProvider` calling Google Gemini REST API (`gemini-2.0-flash` or `gemini-1.5-pro`)
+       with `responseMimeType: "application/json"`. Extracts structured `CriticFindingItem[]`.
+     * Created `AnthropicCriticProvider` calling Anthropic Messages API (`claude-3-5-sonnet-20241022`)
+       with JSON output parsing.
+     * Created `AutoLLMCriticProvider` detecting environment variables (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`)
+       with fallback to deterministic `StaticRuleCriticProvider`.
+     * Created unit test suite in `packages/critic/src/reviewer/providers/providers.test.ts`.
+   - Agent Context Customization:
+     * Enhanced `PeersIndexManager` in `packages/daemon/src/shadow/peers-index.ts` to detect and load
+       custom project guidelines from `CONTRACT/peers.template.md` and `.nucleus/peers.template.md`.
+     * Created unit test suite in `packages/daemon/src/shadow/peers-index.test.ts`.
+   - WAN NAT Traversal Guidance:
+     * Added `tunnelGuidance` to `InitRunner` (`packages/cli/src/commands/init.ts`) and `bin/nucleus.js`
+       providing immediate zero-configuration WAN commands for remote contributors.
+   - End-to-End Multi-Lane Dogfooding Simulation:
+     * Implemented `dogfooding-simulation.test.ts` in `packages/coordinator/src/server/`.
+     * Verified multi-node lifecycle: invite tokens -> join handshake -> task claiming ->
+       15s lease contract lock & release -> uncommitted shadow diff streaming ->
+       Stage 1 & 2 AI critique gate -> task approval -> clean severance.
+
+3. WHY BEHIND THE CHANGE
+   - Production Grade Architectural Gate: Static checks detect format, build, and regex secrets;
+     generative LLMs detect subtle architectural contract divergences, missing validation, or schema mismatches.
+   - Project Customization: Teams need to instruct AI agents on repo-specific coding conventions (e.g.
+     "always run typecheck", "use strict error envelopes").
+   - Internet Accessibility: Room hosts frequently want remote friends to collaborate without complex router
+     port forwarding. Printing Cloudflare Tunnel / Tailscale options eliminates networking friction.
+   - Verification Rigor: Dogfooding multi-lane simulation guarantees all 5 packages work cohesively under
+     real concurrent operational scenarios.
+
+4. WHY NOT THE ALTERNATIVE(S)
+   - Alternative A (Enforce hard dependency on Gemini or Anthropic SDKs):
+     * Rejected: Adding `@google/genai` or `@anthropic-ai/sdk` bloats node_modules and introduces
+       potential version conflicts. Using Node 22 native ESM `fetch` with lightweight payload schemas
+       keeps the footprint minimal and fast.
+   - Alternative B (Force manual port forwarding in routers):
+     * Rejected: Most developers work behind CGNAT or home Wi-Fi where router admin access is inaccessible
+       or cumbersome. Tunnel guidance (Cloudflare Tunnel, Tailscale) provides instant WAN access.
+   - Alternative C (Hardcoded monolithic PEERS.md instructions):
+     * Rejected: Repositories have distinct conventions. Dynamic template ingestion gives teams full autonomy.
+
+5. FILES MODIFIED / CREATED
+   - [CREATE] packages/critic/src/reviewer/providers/gemini-provider.ts
+   - [CREATE] packages/critic/src/reviewer/providers/anthropic-provider.ts
+   - [CREATE] packages/critic/src/reviewer/providers/auto-provider.ts
+   - [CREATE] packages/critic/src/reviewer/providers/index.ts
+   - [CREATE] packages/critic/src/reviewer/providers/providers.test.ts
+   - [MODIFY] packages/critic/src/index.ts
+   - [MODIFY] packages/daemon/src/shadow/peers-index.ts
+   - [CREATE] packages/daemon/src/shadow/peers-index.test.ts
+   - [MODIFY] packages/cli/src/commands/init.ts
+   - [MODIFY] packages/cli/bin/nucleus.js
+   - [MODIFY] packages/coordinator/src/server/coordinator-server.ts
+   - [CREATE] packages/coordinator/src/server/dogfooding-simulation.test.ts
+   - [CREATE] logs/critic/dogfooding_and_llm_providers/dogfooding_and_llm_critic_2026-11-23.txt
+
+6. PROTOCOL / API / EVENT CHANGES
+   - Added `getContractStore()` and `getMutex()` state accessors to `CoordinatorServer`.
+   - Added `tunnelGuidance` to `InitRunner.start()`.
+   - Exported `GeminiCriticProvider`, `AnthropicCriticProvider`, and `AutoLLMCriticProvider` from `@nucleus/critic`.
+
+7. TESTING & VERIFICATION
+   - `npm test`: **16 test files, 49 tests all passing** in 2.55s.
+   - `npm run build`: Zero compilation errors across all 5 monorepo workspaces.
+   - Push Protection Verification: Dynamically constructed mock test tokens to ensure GitHub push protection
+     accepts git commits cleanly.
+
+8. NEXT STEPS / OPEN ITEMS
+   - Ready for Phase 1 milestone tag and interactive team trial.
+================================================================================
