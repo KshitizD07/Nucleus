@@ -15,7 +15,8 @@
 
 - [The Core Problem](#-the-core-problem)
 - [System Architecture (The Pull Model)](#-system-architecture-the-pull-model)
-- [How Multiplayer Collaboration Works](#-how-multiplayer-collaboration-works)
+- [Core Capabilities & How Collaboration Works](#-core-capabilities--how-collaboration-works)
+- [How LLM Agents Auto-Discover Peer Code (`.nucleus/PEERS.md`)](#-how-llm-agents-auto-discover-peer-code-nucleuspeersmd)
 - [Non-Negotiable Safety & Compliance Boundaries](#-non-negotiable-safety--compliance-boundaries)
 - [Project Directory Layout](#-project-directory-layout)
 - [Component Breakdown](#-component-breakdown)
@@ -73,18 +74,47 @@ Instead, Nucleus uses an unprivileged **file-based pull model**:
 
 ---
 
-## ⚡ How Multiplayer Collaboration Works
+## ⚡ Core Capabilities & How Collaboration Works
 
 Dropping central terminal steering does **not** mean working in silos. Nucleus delivers true live collaboration:
 
 1. **Live Work-in-Progress Diff Streaming**: As an agent or human writes code, `sphere-node` streams file-touch events and incremental diffs to the room feed. Everyone sees schemas, types, and logic take shape in real time.
-2. **Cross-Lane Shadow Mirror (`.nucleus/shadows/<lane>/`)**: When a backend engineer needs to inspect how the frontend is calling an endpoint, they don't wait for a git commit or push to GitHub. The daemon maintains a read-only local shadow directory of active peer lanes. The backend engineer's local AI agent can directly read `.nucleus/shadows/frontend/src/api/auth.ts` live.
+2. **Cross-Lane Shadow Mirror (`.nucleus/shadows/<lane>/`)**: When a backend engineer needs to inspect how the frontend is calling an endpoint (or vice-versa), they don't wait for a git commit or push to GitHub. The daemon maintains a read-only local shadow directory of active peer lanes.
 3. **The Living Contract (`CONTRACT/`)**: Foundational files (DB schema, OpenAPI endpoints, Socket events) require a short lease-based lock to modify. Once updated, changes are broadcast instantly to all dependent lanes.
 4. **The Critique Gate**: When a task is marked `in_review`:
    - Stage 1: Deterministic checks (lint, types, tests, secret-scan) run in a clean Git worktree.
    - Stage 2: Initiator AI critic reviews the diff against the original spec and writes structured findings to `.nucleus/critiques/<task-id>.md`.
    - The contributor tells their local CLI: `claude "Address issues in .nucleus/critiques/auth.md"`.
 5. **Git Stays the Source of Truth**: The room never has write access to the central repository. The engineer who wrote the code reviews the final diff and pushes their own Git commit.
+
+---
+
+## 🤖 How LLM Agents Auto-Discover Peer Code (`.nucleus/PEERS.md`)
+
+AI coding agents (Claude Code, Google Antigravity, Cursor, Aider) do not have telepathic knowledge of network websockets, but they natively read workspace files. 
+
+Nucleus bridges this gap using an automatically maintained **`.nucleus/PEERS.md`** file:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        HOW THE AGENT "KNOWS"                           │
+├────────────────────────────────────────────────────────────────────────┤
+│ 1. `sphere-node` automatically creates and updates `.nucleus/PEERS.md` │
+│    in real time as teammates work.                                     │
+│                                                                        │
+│ 2. The agent reads `.nucleus/PEERS.md` and discovers:                  │
+│    "Aryan is currently editing backend auth at:                        │
+│     .nucleus/shadows/backend/src/modules/auth/auth.controller.ts"      │
+│                                                                        │
+│ 3. When prompted to "build the frontend login form", the agent         │
+│    proactively reads that shadow file, extracts the exact body types   │
+│    and response envelope, and implements matching UI hooks!            │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+This guarantees that:
+- **Zero Hallucinated APIs**: The frontend agent writes hooks matching the actual backend controller, not an assumed interface.
+- **Zero Git Friction**: The backend code does not need to be committed or pushed to a remote GitHub branch for the frontend agent to inspect it.
 
 ---
 
@@ -113,8 +143,14 @@ nucleus/
 ├── packages/                                      # Monorepo packages (TypeScript)
 │   ├── protocol/                                  # Zod message envelopes & wire contracts
 │   ├── coordinator/                               # Room coordinator, lease mutex, taskboard
-│   ├── daemon/                                    # sphere-node (workspace sync, diff stream)
+│   ├── daemon/                                    # sphere-node (workspace sync, diff stream, PEERS.md)
 │   └── critic/                                    # Git worktree test & AI review runner
+├── .nucleus/                                      # Local runtime coordination directory
+│   ├── PEERS.md                                   # Real-time peer roster & active file index (read by agents)
+│   ├── shadows/                                   # Live read-only mirrors of peer lane working trees
+│   │   ├── backend/                               # Live uncommitted files from backend lane
+│   │   └── frontend/                              # Live uncommitted files from frontend lane
+│   └── critiques/                                 # Critic feedback markdown files for local agents
 └── CONTRACT/                                      # The Living Blueprint (shared interfaces)
     ├── api.md                                     # REST/GraphQL route specifications
     ├── schema.prisma                              # Database contract
