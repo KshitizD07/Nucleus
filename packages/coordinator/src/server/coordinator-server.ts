@@ -2,18 +2,23 @@ import { WebSocketServer, WebSocket } from "ws";
 import {
   HelloPayloadSchema,
   HeartbeatPayloadSchema,
-  MessageEnvelopeSchema
+  MessageEnvelopeSchema,
+  ContractLockRequestSchema,
+  ContractLockReleaseSchema,
+  ContractUpdateBroadcastSchema
 } from "@nucleus/protocol";
 import { NodeRegistry } from "../state/node-registry.js";
 import { LeaseMutex } from "../lock/mutex.js";
 import { EventLog } from "../state/event-log.js";
 import { InviteStore } from "../state/invite-store.js";
+import { ContractStore } from "../state/contract-store.js";
 import { buildMessage } from "./message-builder.js";
 
 export interface CoordinatorOptions {
   port: number;
   roomId: string;
   logDir: string;
+  contractDir?: string;
 }
 
 export class CoordinatorServer {
@@ -22,6 +27,7 @@ export class CoordinatorServer {
   private readonly mutex: LeaseMutex;
   private readonly eventLog: EventLog;
   private readonly invites: InviteStore;
+  private readonly contractStore: ContractStore;
   private readonly sockets: Map<string, WebSocket>;
   private readonly roomId: string;
   private heartbeatTimer: NodeJS.Timeout | null = null;
@@ -32,6 +38,7 @@ export class CoordinatorServer {
     this.mutex = new LeaseMutex();
     this.eventLog = new EventLog(options.logDir, options.roomId);
     this.invites = new InviteStore();
+    this.contractStore = new ContractStore(options.contractDir ?? "./CONTRACT");
     this.sockets = new Map();
     this.wss = new WebSocketServer({ port: options.port });
   }
@@ -115,7 +122,7 @@ export class CoordinatorServer {
     });
   }
 
-  private handleMessage(node_id: string, _ws: WebSocket, raw: string): void {
+  private handleMessage(node_id: string, ws: WebSocket, raw: string): void {
     try {
       const envelope = MessageEnvelopeSchema.parse(JSON.parse(raw));
 
@@ -130,11 +137,74 @@ export class CoordinatorServer {
         return;
       }
 
-      // Fan out all other messages (diff streams, contract updates, etc.)
+      if (envelope.type === "contract:lock_req") {
+        this.handleContractLockRequest(node_id, ws, envelope.payload);
+        return;
+      }
+
+      if (envelope.type === "contract:lock_release") {
+        this.handleContractLockRelease(node_id, envelope.payload);
+        return;
+      }
+
+      if (envelope.type === "contract:update") {
+        this.handleContractUpdate(node_id, envelope.payload);
+        return;
+      }
+
+      // Fan out all other messages (diff streams, task events, etc.)
       this.broadcast(envelope, node_id);
     } catch {
       // Silently drop malformed messages
     }
+  }
+
+  private handleContractLockRequest(node_id: string, ws: WebSocket, payload: unknown): void {
+    const req = ContractLockRequestSchema.parse(payload);
+    const granted = this.mutex.acquire(req.file_path, node_id, req.ttl_seconds);
+
+    if (granted) {
+      this.eventLog.append("contract_lock_acquired", { file_path: req.file_path, holder: node_id });
+      ws.send(JSON.stringify(buildMessage(this.roomId, "coordinator", "contract:lock_grant", {
+        file_path: req.file_path,
+        holder_id: node_id,
+        lease_expires_at: Date.now() + req.ttl_seconds * 1000
+      })));
+    } else {
+      const existing = this.mutex.getLock(req.file_path);
+      ws.send(JSON.stringify(buildMessage(this.roomId, "coordinator", "contract:lock_denied", {
+        file_path: req.file_path,
+        held_by: existing?.holderId ?? "unknown",
+        expires_at: existing?.expiresAt ?? 0
+      })));
+    }
+  }
+
+  private handleContractLockRelease(node_id: string, payload: unknown): void {
+    const req = ContractLockReleaseSchema.parse(payload);
+    this.mutex.release(req.file_path, node_id);
+    this.eventLog.append("contract_lock_released", { file_path: req.file_path, holder: node_id });
+  }
+
+  private handleContractUpdate(node_id: string, payload: unknown): void {
+    const update = ContractUpdateBroadcastSchema.parse(payload);
+
+    // Only the lock holder may publish an update
+    const lock = this.mutex.getLock(update.file_path);
+    if (!lock || lock.holderId !== node_id) return;
+
+    const entry = this.contractStore.update(update.file_path, update.content);
+    this.eventLog.append("contract_updated", { file_path: update.file_path, version: entry.version });
+
+    this.broadcast(
+      buildMessage(this.roomId, "coordinator", "contract:update", {
+        file_path: update.file_path,
+        version: entry.version,
+        content: update.content,
+        touched_sections: update.touched_sections
+      }),
+      node_id
+    );
   }
 
   private handleDisconnect(node_id: string): void {
