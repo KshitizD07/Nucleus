@@ -85,6 +85,28 @@ export class PeersIndexManager {
       ""
     );
 
+    // Dynamic template customization: incorporate project-specific guidelines if present
+    const contractTemplatePath = this.jail.resolveSafe(path.join("CONTRACT", "peers.template.md"));
+    const nucleusTemplatePath = this.jail.resolveSafe(path.join(".nucleus", "peers.template.md"));
+    let customTemplate: string | null = null;
+
+    if (fs.existsSync(contractTemplatePath)) {
+      customTemplate = fs.readFileSync(contractTemplatePath, "utf8");
+    } else if (fs.existsSync(nucleusTemplatePath)) {
+      customTemplate = fs.readFileSync(nucleusTemplatePath, "utf8");
+    }
+
+    if (customTemplate && customTemplate.trim()) {
+      lines.push(
+        "---",
+        "",
+        "## Project-Specific Collaboration Rules",
+        "",
+        customTemplate.trim(),
+        ""
+      );
+    }
+
     fs.writeFileSync(this.peersFilePath, lines.join("\n"), "utf8");
   }
 
