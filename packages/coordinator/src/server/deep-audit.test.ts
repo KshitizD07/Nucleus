@@ -133,7 +133,7 @@ describe("Nucleus Comprehensive System Audit: Functionality, Efficiency & Securi
         file_path: "api.md",
         version: 1,
         content: updatedApi,
-        author_node_id: "node-be"
+        touched_sections: ["auth"]
       });
       expect(applyResult.applied).toBe(true);
       expect(fs.readFileSync(path.join(frontendDir, "CONTRACT", "api.md"), "utf8")).toBe(updatedApi);
@@ -232,7 +232,7 @@ describe("Nucleus Comprehensive System Audit: Functionality, Efficiency & Securi
           file_path: "api.md",
           version: 99,
           content: "# Broadcast test",
-          author_node_id: "coordinator"
+          touched_sections: []
         })
       );
 

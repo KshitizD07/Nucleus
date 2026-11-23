@@ -108,6 +108,15 @@ export class CoordinatorServer {
 
         this.eventLog.append("node_joined", { node_id, lane: hello.lane });
 
+        const contracts = this.contractStore.getAll().map((c) => ({
+          file_path: c.filePath,
+          version: c.version,
+          content: c.content,
+          touched_sections: []
+        }));
+
+        const tasks = this.taskBoard.getAll();
+
         const snapshot = buildMessage(this.roomId, "coordinator", "session:room_snapshot", {
           room_id: this.roomId,
           initiator_id: "coordinator",
@@ -116,8 +125,10 @@ export class CoordinatorServer {
             lane: n.lane,
             status: n.status
           })),
-          contract_version: 0,
-          task_count: 0
+          contract_version: contracts[0]?.version ?? 0,
+          task_count: tasks.length,
+          tasks,
+          contracts
         });
 
         ws.send(JSON.stringify(snapshot));
@@ -299,7 +310,7 @@ export class CoordinatorServer {
     }
   }
 
-  private broadcast(message: unknown, excludeNodeId?: string): void {
+  public broadcast(message: unknown, excludeNodeId?: string): void {
     const data = JSON.stringify(message);
     for (const [id, ws] of this.sockets) {
       if (id !== excludeNodeId && ws.readyState === WebSocket.OPEN) {

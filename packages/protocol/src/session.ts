@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TaskItemSchema } from "./task.js";
 
 export const NodeCapabilitiesSchema = z.object({
   cli: z.string().default("unknown"),       // "claude-code" | "antigravity" | "aider"
@@ -23,7 +24,14 @@ export const RoomSnapshotPayloadSchema = z.object({
     status: z.enum(["idle", "active", "review"])
   })),
   contract_version: z.number().int().nonnegative().default(0),
-  task_count: z.number().int().nonnegative().default(0)
+  task_count: z.number().int().nonnegative().default(0),
+  tasks: z.array(TaskItemSchema).optional(),
+  contracts: z.array(z.object({
+    file_path: z.string(),
+    version: z.number(),
+    content: z.string(),
+    touched_sections: z.array(z.string()).default([])
+  })).optional()
 });
 
 export const HeartbeatPayloadSchema = z.object({

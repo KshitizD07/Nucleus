@@ -64,6 +64,20 @@ export class JoinRunner {
           });
         }
       }
+
+      // Automatically sync room tasks to disk (.nucleus/tasks.json)
+      if (snapshot.tasks && snapshot.tasks.length > 0) {
+        this.taskReplica?.applySnapshot(snapshot.tasks);
+        console.log(`[Tasks] Synchronized ${snapshot.tasks.length} tasks to .nucleus/tasks.json`);
+      }
+
+      // Automatically sync living contracts to disk (CONTRACT/)
+      if (snapshot.contracts && snapshot.contracts.length > 0) {
+        for (const c of snapshot.contracts) {
+          this.contractReplica?.applyUpdate(c);
+          console.log(`[Contract] Synchronized ${c.file_path} to CONTRACT/${c.file_path}`);
+        }
+      }
     };
 
     this.client.onMessage = (type, payload: any) => {

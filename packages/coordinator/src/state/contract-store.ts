@@ -15,6 +15,24 @@ export class ContractStore {
   constructor(contractDir: string) {
     this.contractDir = path.resolve(contractDir);
     fs.mkdirSync(this.contractDir, { recursive: true });
+    this.loadFromDisk();
+  }
+
+  private loadFromDisk(): void {
+    if (!fs.existsSync(this.contractDir)) return;
+    const files = fs.readdirSync(this.contractDir);
+    for (const f of files) {
+      const full = path.join(this.contractDir, f);
+      if (fs.statSync(full).isFile()) {
+        const content = fs.readFileSync(full, "utf8");
+        this.entries.set(f, {
+          filePath: f,
+          content,
+          version: 1,
+          updatedAt: Date.now()
+        });
+      }
+    }
   }
 
   public update(filePath: string, content: string): ContractEntry {
