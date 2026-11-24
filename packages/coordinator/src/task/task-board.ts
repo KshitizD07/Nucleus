@@ -51,6 +51,9 @@ export class TaskBoardManager {
     }
 
     task.status = status;
+    if (status === "unassigned") {
+      task.assigned_to = null;
+    }
     if (branch) task.branch = branch;
 
     this.persistToDisk();

@@ -1,4 +1,6 @@
 import path from "node:path";
+import fs from "node:fs";
+import type { TaskItem } from "@nucleus/protocol";
 import {
   DaemonClient,
   PeersIndexManager,
@@ -23,6 +25,10 @@ export class JoinRunner {
   private shadowMirror: ShadowMirror | null = null;
   private contractReplica: ContractReplica | null = null;
   private taskReplica: TaskBoardReplica | null = null;
+  private taskWatcher: fs.FSWatcher | null = null;
+  private taskDebounceTimer: NodeJS.Timeout | null = null;
+  private isApplyingInbound = false;
+  private knownTasksMap: Map<string, TaskItem> = new Map();
   private readonly options: Required<JoinRunnerOptions>;
 
   constructor(options: JoinRunnerOptions) {
@@ -67,7 +73,13 @@ export class JoinRunner {
 
       // Automatically sync room tasks to disk (.nucleus/tasks.json)
       if (snapshot.tasks && snapshot.tasks.length > 0) {
+        this.isApplyingInbound = true;
         this.taskReplica?.applySnapshot(snapshot.tasks);
+        this.knownTasksMap.clear();
+        for (const t of snapshot.tasks) {
+          this.knownTasksMap.set(t.id, { ...t });
+        }
+        this.isApplyingInbound = false;
         console.log(`[Tasks] Synchronized ${snapshot.tasks.length} tasks to .nucleus/tasks.json`);
       }
 
@@ -106,7 +118,10 @@ export class JoinRunner {
       } else if (type === "sharing:lane_shadow_sync") {
         this.shadowMirror?.applySync(payload);
       } else if (type === "task:status") {
+        this.isApplyingInbound = true;
         this.taskReplica?.applyUpdate(payload);
+        this.knownTasksMap.set(payload.id, { ...payload });
+        this.isApplyingInbound = false;
         if (payload.status === "approved") {
           console.log(`\n🎉 Task [${payload.id}] was APPROVED by Critique Gate!`);
           console.log(`🚀 Ready to git commit and push to remote!\n`);
@@ -120,6 +135,11 @@ export class JoinRunner {
         console.error(`\n⚠️ Task claim rejected: ${payload.reason}`);
         if (payload.available_tasks && payload.available_tasks.length > 0) {
           console.error(`Available tasks in your lane: [${payload.available_tasks.join(", ")}]\n`);
+        }
+        if (this.knownTasksMap.size > 0) {
+          this.isApplyingInbound = true;
+          this.taskReplica?.applySnapshot(Array.from(this.knownTasksMap.values()));
+          this.isApplyingInbound = false;
         }
       }
     };
@@ -147,10 +167,73 @@ export class JoinRunner {
     this.diffWatcher.start();
     console.log(`[Nucleus] Workspace watcher active. Context published to .nucleus/PEERS.md`);
 
+    try {
+      const sessionDir = path.resolve(workspaceRoot, ".nucleus");
+      if (!fs.existsSync(sessionDir)) {
+        fs.mkdirSync(sessionDir, { recursive: true });
+      }
+      fs.writeFileSync(
+        path.resolve(sessionDir, "session.json"),
+        JSON.stringify({ lane, nodeId, url }, null, 2),
+        "utf8"
+      );
+
+      // Watch .nucleus/tasks.json for local CLI/agent edits and propagate to room
+      const tasksFilePath = path.resolve(sessionDir, "tasks.json");
+      this.taskWatcher = fs.watch(sessionDir, (event, filename) => {
+        if (!filename || filename === "tasks.json") {
+          if (this.isApplyingInbound) return;
+          if (this.taskDebounceTimer) clearTimeout(this.taskDebounceTimer);
+          this.taskDebounceTimer = setTimeout(() => {
+            if (!fs.existsSync(tasksFilePath) || !this.client) return;
+            try {
+              const raw = fs.readFileSync(tasksFilePath, "utf8");
+              const currentTasks: TaskItem[] = JSON.parse(raw);
+              for (const current of currentTasks) {
+                const prev = this.knownTasksMap.get(current.id);
+                if (!prev) continue;
+
+                // Local claim detected
+                if ((prev.status === "unassigned" || !prev.assigned_to) && (current.status === "active" || current.status === "assigned") && current.assigned_to) {
+                  this.client.claimTask(current.id);
+                }
+                // Local release detected
+                else if (prev.status !== "unassigned" && current.status === "unassigned") {
+                  this.client.updateTaskStatus(current.id, "unassigned");
+                }
+                // Local status update (e.g. in_review)
+                else if (prev.status !== current.status) {
+                  this.client.updateTaskStatus(current.id, current.status, current.branch);
+                }
+              }
+            } catch {}
+          }, 80);
+        }
+      });
+    } catch {}
+
     return this.client;
   }
 
   public stop(): void {
+    if (this.taskWatcher) {
+      try {
+        this.taskWatcher.close();
+      } catch {}
+      this.taskWatcher = null;
+    }
+    if (this.taskDebounceTimer) {
+      clearTimeout(this.taskDebounceTimer);
+      this.taskDebounceTimer = null;
+    }
+
+    try {
+      const sessionFile = path.resolve(this.options.workspaceRoot, ".nucleus", "session.json");
+      if (fs.existsSync(sessionFile)) {
+        fs.unlinkSync(sessionFile);
+      }
+    } catch {}
+
     if (this.diffWatcher) {
       this.diffWatcher.stop();
       this.diffWatcher = null;

@@ -1,0 +1,91 @@
+================================================================================
+NUCLEUS SESSION LOG: TASK RELEASE AND BIDIRECTIONAL FILE SYNC
+================================================================================
+Date: 2026-11-24
+Domain: coordinator
+Feature: taskboard
+Task Name: task_release_and_bidirectional_sync
+
+--------------------------------------------------------------------------------
+1. TASK OVERVIEW
+--------------------------------------------------------------------------------
+During multi-node dogfooding across separate machines over Cloudflare Tunnel,
+two functional friction points were discovered:
+1. When a user claims a task by mistake or wants to cancel work, there was no
+   CLI command to release/unclaim the task back to "unassigned".
+2. When a contributor executed "nucleus claim <task>" in a separate terminal
+   without explicit lane flags, the command performed only a local filesystem
+   write to .nucleus/tasks.json. Because the running JoinRunner daemon had no
+   watcher on .nucleus/tasks.json, it never broadcasted the claim over the
+   coordinator WebSocket. Consequently, peer nodes saw stale tasks and could
+   claim the same or wrong-lane tasks locally without server mediation.
+
+--------------------------------------------------------------------------------
+2. ARCHITECTURAL & PROTOCOL DECISIONS
+--------------------------------------------------------------------------------
+- Implemented "nucleus release <task>" and "nucleus unclaim <task>" in @nucleus/cli:
+  Resets task.status to "unassigned" and task.assigned_to to null.
+- Added TaskFileWatcher in JoinRunner:
+  Watches .nucleus/tasks.json for modifications made either by human CLI
+  commands or by autonomous agent LLMs.
+- Bidirectional Sync:
+  - Inbound updates (snapshot / task:status from coordinator) update disk
+    with isApplyingInbound flag to prevent echo loops.
+  - Outbound edits (local changes to status or assignee) automatically dispatch
+    client.claimTask() or client.updateTaskStatus() over WebSocket.
+  - Unauthorized or mismatched claims rejected with "task:claim_failed"
+    automatically trigger local disk rollback to authoritative coordinator state.
+- Path Resolution for Cloudflare Tunnel:
+  Auto-detects cloudflared binary in Program Files and extends handshake timeout
+  to 15s to accommodate DNS propagation.
+
+--------------------------------------------------------------------------------
+3. WHY BEHIND THE CHANGE
+--------------------------------------------------------------------------------
+Under the Pure Pull Model, Nucleus does not inject stdin or keystrokes into
+developer shells. Communication is strictly file-mediated (.nucleus/tasks.json,
+PEERS.md, CONTRACT/). For this model to function reliably in a multi-node mesh,
+local file edits made by developers or autonomous agents must be faithfully
+observed and reconciled with the central coordinator state machine.
+
+--------------------------------------------------------------------------------
+4. WHY NOT THE ALTERNATIVE(S)
+--------------------------------------------------------------------------------
+- Alternative: Require contributors to run an interactive prompt CLI to claim/release.
+  Rejected: Breaks compatibility with autonomous AI agent workflows (Claude Code,
+  Antigravity, Aider) which edit files directly on disk.
+- Alternative: Direct peer-to-peer file sharing without coordinator mutex.
+  Rejected: Leads to split-brain race conditions where two agents claim the
+  same task concurrently during network partitions.
+
+--------------------------------------------------------------------------------
+5. IMPACTED PACKAGES & MODULES
+--------------------------------------------------------------------------------
+- packages/coordinator/src/task/task-board.ts: Support status "unassigned" clearing assigned_to.
+- packages/cli/src/args.ts: Added "release" and "unclaim" commands.
+- packages/cli/bin/nucleus.js: Integrated release command runner.
+- packages/cli/src/commands/tasks.ts: Added releaseTaskLocally.
+- packages/cli/src/commands/join.ts: Added TaskFileWatcher with bidirectional sync and rollback.
+- packages/cli/src/tunnel/tunnel-manager.ts: Auto-path resolution and timeout adjustment.
+
+--------------------------------------------------------------------------------
+6. DATA CONTRACTS & WIRE FORMAT
+--------------------------------------------------------------------------------
+Utilizes existing Zod contracts:
+- TaskClaimSchema: { task_id, node_id }
+- TaskStatusUpdateSchema: { task_id, status: "unassigned" | "active" | "in_review", branch? }
+- Event broadcast: "task:status" with updated TaskItem payload.
+
+--------------------------------------------------------------------------------
+7. SECURITY & TOS COMPLIANCE
+--------------------------------------------------------------------------------
+- Pure Pull Model preserved: Zero terminal hijacking or fake stdin.
+- Strict workspace jail: Task file watcher strictly confined to .nucleus/.
+- Zero credential transport: Tokens validated locally or via invite store.
+
+--------------------------------------------------------------------------------
+8. VERIFICATION & VALIDATION
+--------------------------------------------------------------------------------
+- All 19 test suites and 73 test cases pass with zero regressions.
+- Tested local task claim and release across monorepo build.
+================================================================================

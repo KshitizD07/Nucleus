@@ -114,6 +114,17 @@ export function claimTaskLocally(workspaceRoot: string, taskId: string, assigned
     return false;
   }
 
+  let effectiveLane = lane;
+  if (!effectiveLane) {
+    const sessionFile = path.resolve(workspaceRoot, ".nucleus", "session.json");
+    if (fs.existsSync(sessionFile)) {
+      try {
+        const sess = JSON.parse(fs.readFileSync(sessionFile, "utf8"));
+        if (sess.lane) effectiveLane = sess.lane;
+      } catch {}
+    }
+  }
+
   try {
     const raw = fs.readFileSync(tasksFile, "utf8");
     const tasks: TaskItem[] = JSON.parse(raw);
@@ -124,17 +135,17 @@ export function claimTaskLocally(workspaceRoot: string, taskId: string, assigned
       return false;
     }
 
-    if (lane && task.lane !== lane) {
+    if (effectiveLane && task.lane !== effectiveLane) {
       console.error(
-        `\n⚠️ Lane mismatch: Task [${taskId}] belongs to '${task.lane}' lane, but your active lane is '${lane}'.`
+        `\n⚠️ Lane mismatch: Task [${taskId}] belongs to '${task.lane}' lane, but your active lane is '${effectiveLane}'.`
       );
       const availableUserLane = tasks
-        .filter((t) => t.lane === lane && (!t.assigned_to || t.status === "unassigned"))
+        .filter((t) => t.lane === effectiveLane && (!t.assigned_to || t.status === "unassigned"))
         .map((t) => t.id);
       if (availableUserLane.length > 0) {
-        console.error(`Available tasks in '${lane}' lane: [${availableUserLane.join(", ")}]\n`);
+        console.error(`Available tasks in '${effectiveLane}' lane: [${availableUserLane.join(", ")}]\n`);
       } else {
-        console.error(`No unassigned tasks currently available in '${lane}' lane.\n`);
+        console.error(`No unassigned tasks currently available in '${effectiveLane}' lane.\n`);
       }
       return false;
     }
@@ -161,6 +172,43 @@ export function claimTaskLocally(workspaceRoot: string, taskId: string, assigned
     return true;
   } catch (err: any) {
     console.error(`Failed to update task:`, err.message);
+    return false;
+  }
+}
+
+export function releaseTaskLocally(workspaceRoot: string, taskId: string, releasedBy?: string): boolean {
+  const tasksFile = path.resolve(workspaceRoot, ".nucleus", "tasks.json");
+
+  if (!fs.existsSync(tasksFile)) {
+    console.error(`Error: .nucleus/tasks.json not found in ${workspaceRoot}`);
+    return false;
+  }
+
+  try {
+    const raw = fs.readFileSync(tasksFile, "utf8");
+    const tasks: TaskItem[] = JSON.parse(raw);
+
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) {
+      console.error(`Error: Task "${taskId}" not found on board.`);
+      return false;
+    }
+
+    if (task.status === "unassigned" || !task.assigned_to) {
+      console.log(`\nTask [${taskId}] is already unassigned.\n`);
+      return true;
+    }
+
+    const prevAssignee = task.assigned_to;
+    task.assigned_to = null;
+    task.status = "unassigned";
+
+    fs.writeFileSync(tasksFile, JSON.stringify(tasks, null, 2), "utf8");
+    console.log(`\n🔓 Successfully released task [${taskId}] (previously assigned to [${prevAssignee}])!`);
+    console.log(`Status reset to "unassigned". Live daemon will sync changes to room.\n`);
+    return true;
+  } catch (err: any) {
+    console.error(`Failed to release task:`, err.message);
     return false;
   }
 }

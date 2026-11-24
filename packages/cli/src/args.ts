@@ -1,7 +1,7 @@
 import { parseArgs } from "node:util";
 
 export interface ParsedCliArgs {
-  command: "init" | "join" | "invite" | "status" | "tasks" | "claim" | "help" | "unknown";
+  command: "init" | "join" | "invite" | "status" | "tasks" | "claim" | "release" | "unclaim" | "help" | "unknown";
   taskId?: string;
   name?: string;
   port?: number;
@@ -41,7 +41,7 @@ export function parseCli(args: string[]): ParsedCliArgs {
     const primaryCommand = positionals[0] || "help";
     let cmd: ParsedCliArgs["command"] = "unknown";
 
-    if (["init", "join", "invite", "status", "tasks", "claim", "help"].includes(primaryCommand)) {
+    if (["init", "join", "invite", "status", "tasks", "claim", "release", "unclaim", "help"].includes(primaryCommand)) {
       cmd = primaryCommand as ParsedCliArgs["command"];
     }
 
@@ -84,6 +84,7 @@ Commands:
   join             Connect this workspace to an existing multiplayer room
   tasks            View and filter the shared task board (.nucleus/tasks.json)
   claim <task_id>  Claim an available task on the board for yourself
+  release <id>     Release/unclaim a claimed task back to unassigned
   invite           Issue a join invite token for a specific lane (when hosting)
   status           Show active room status and peer activity
   help             Display help information

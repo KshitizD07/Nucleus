@@ -1,4 +1,5 @@
 import { spawn, ChildProcess } from "node:child_process";
+import * as fs from "node:fs";
 
 export interface TunnelResult {
   url: string;
@@ -39,13 +40,31 @@ export class TunnelManager {
     return this.tunnelProcess;
   }
 
+  private resolveCloudflaredBinary(): string {
+    const candidates = [
+      "cloudflared",
+      "C:\\Program Files (x86)\\cloudflared\\cloudflared.exe",
+      "C:\\Program Files\\cloudflared\\cloudflared.exe",
+      process.env.LOCALAPPDATA ? `${process.env.LOCALAPPDATA}\\Microsoft\\WinGet\\Packages\\Cloudflare.cloudflared_Microsoft.Winget.Source_8wekyb3d8bbwe\\cloudflared.exe` : ""
+    ].filter(Boolean);
+
+    for (const cand of candidates) {
+      if (cand === "cloudflared") return cand;
+      if (fs.existsSync(cand)) {
+        return cand;
+      }
+    }
+    return "cloudflared";
+  }
+
   private tryCloudflared(port: number): Promise<TunnelResult | null> {
     return new Promise((resolve) => {
       let resolved = false;
       let proc: ChildProcess;
+      const bin = this.resolveCloudflaredBinary();
 
       try {
-        proc = spawn("cloudflared", ["tunnel", "--url", `http://localhost:${port}`], {
+        proc = spawn(bin, ["tunnel", "--url", `http://localhost:${port}`], {
           stdio: ["ignore", "pipe", "pipe"]
         });
       } catch {
@@ -83,7 +102,7 @@ export class TunnelManager {
           } catch {}
           resolve(null);
         }
-      }, 5000);
+      }, 15000);
     });
   }
 
