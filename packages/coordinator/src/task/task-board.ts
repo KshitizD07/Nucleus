@@ -21,7 +21,7 @@ export class TaskBoardManager {
     this.persistToDisk();
   }
 
-  public claimTask(taskId: string, nodeId: string, branch?: string, lane?: string): { success: boolean; task?: TaskItem; reason?: string } {
+  public claimTask(taskId: string, nodeId: string, branch?: string, lane?: string, displayName?: string): { success: boolean; task?: TaskItem; reason?: string } {
     const task = this.tasks.get(taskId);
     if (!task) {
       return { success: false, reason: `Task ${taskId} not found` };
@@ -32,11 +32,12 @@ export class TaskBoardManager {
         reason: `Forbidden: Lane mismatch. Node '${nodeId}' in lane '${lane}' cannot claim task '${taskId}' belonging to lane '${task.lane}'`
       };
     }
-    if (task.assigned_to && task.assigned_to !== nodeId) {
+    const assignee = displayName || nodeId;
+    if (task.assigned_to && task.assigned_to !== assignee && task.assigned_to !== nodeId) {
       return { success: false, reason: `Task ${taskId} is already claimed by ${task.assigned_to}` };
     }
 
-    task.assigned_to = nodeId;
+    task.assigned_to = assignee;
     task.status = "active";
     if (branch) task.branch = branch;
 

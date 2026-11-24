@@ -14,6 +14,7 @@ export interface JoinRunnerOptions {
   url: string;
   token: string;
   lane: string;
+  name?: string;
   nodeId?: string;
   workspaceRoot?: string;
 }
@@ -33,11 +34,13 @@ export class JoinRunner {
 
   constructor(options: JoinRunnerOptions) {
     const ws = path.resolve(options.workspaceRoot || process.cwd());
+    const fallbackNodeId = options.name ? `${options.name}` : `node-${options.lane}-${Math.random().toString(36).slice(2, 7)}`;
     this.options = {
       url: options.url,
       token: options.token,
       lane: options.lane,
-      nodeId: options.nodeId || `node-${options.lane}-${Math.random().toString(36).slice(2, 7)}`,
+      name: options.name || "",
+      nodeId: options.nodeId || fallbackNodeId,
       workspaceRoot: ws
     };
   }
@@ -174,7 +177,7 @@ export class JoinRunner {
       }
       fs.writeFileSync(
         path.resolve(sessionDir, "session.json"),
-        JSON.stringify({ lane, nodeId, url }, null, 2),
+        JSON.stringify({ lane, nodeId, name: this.options.name, url }, null, 2),
         "utf8"
       );
 
@@ -195,7 +198,7 @@ export class JoinRunner {
 
                 // Local claim detected
                 if ((prev.status === "unassigned" || !prev.assigned_to) && (current.status === "active" || current.status === "assigned") && current.assigned_to) {
-                  this.client.claimTask(current.id);
+                  this.client.claimTask(current.id, current.assigned_to);
                 }
                 // Local release detected
                 else if (prev.status !== "unassigned" && current.status === "unassigned") {

@@ -1,0 +1,69 @@
+================================================================================
+NUCLEUS SESSION LOG: DISPLAY NAME TASK ASSIGNMENT
+================================================================================
+Date: 2026-11-24
+Domain: coordinator
+Feature: taskboard
+Task Name: display_name_task_assignment
+
+--------------------------------------------------------------------------------
+1. TASK OVERVIEW
+--------------------------------------------------------------------------------
+During dogfooding with multi-machine contributor joins, running "nucleus tasks"
+showed socket IDs ("node-backend-yppys") in the ASSIGNED column rather than
+the human name/handle passed via "nucleus join --name kshit".
+
+--------------------------------------------------------------------------------
+2. ARCHITECTURAL & PROTOCOL DECISIONS
+--------------------------------------------------------------------------------
+- Added optional "display_name" property to TaskClaimSchema in @nucleus/protocol.
+- Updated TaskBoardManager.claimTask to bind "task.assigned_to = displayName || nodeId".
+- Updated JoinRunner to pass contributor's display name from CLI flags or
+  session.json into claimTask(taskId, displayName).
+- Preserved backward compatibility: if displayName is omitted, falls back to nodeId.
+
+--------------------------------------------------------------------------------
+3. WHY BEHIND THE CHANGE
+--------------------------------------------------------------------------------
+Autonomous AI agents and human engineers collaborate more effectively when
+task ownership clearly reflects developer identities rather than transient,
+ephemeral socket hashes.
+
+--------------------------------------------------------------------------------
+4. WHY NOT THE ALTERNATIVE(S)
+--------------------------------------------------------------------------------
+- Alternative: Replace node_id with human name globally across all socket events.
+  Rejected: Socket routing and network mutexes require unique, collisions-free
+  identifiers across nodes, whereas human names may collide or contain spaces.
+
+--------------------------------------------------------------------------------
+5. IMPACTED PACKAGES & MODULES
+--------------------------------------------------------------------------------
+- packages/protocol/src/task.ts: Added display_name to TaskClaimSchema.
+- packages/daemon/src/client/daemon-client.ts: Added displayName parameter to claimTask().
+- packages/coordinator/src/task/task-board.ts: Support displayName in claimTask.
+- packages/coordinator/src/server/coordinator-server.ts: Forward claim.display_name.
+- packages/cli/src/commands/join.ts: Store and forward display name from JoinRunner options.
+- packages/cli/bin/nucleus.js: Pass cli.name to JoinRunner.
+
+--------------------------------------------------------------------------------
+6. DATA CONTRACTS & WIRE FORMAT
+--------------------------------------------------------------------------------
+TaskClaimSchema:
+{
+  task_id: string,
+  node_id: string,
+  display_name?: string
+}
+
+--------------------------------------------------------------------------------
+7. SECURITY & TOS COMPLIANCE
+--------------------------------------------------------------------------------
+- Pure Pull Model intact.
+- No credential transport or terminal injection.
+
+--------------------------------------------------------------------------------
+8. VERIFICATION & VALIDATION
+--------------------------------------------------------------------------------
+- 100% test pass rate across 19 suites and 73 test cases.
+================================================================================

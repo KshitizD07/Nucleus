@@ -24,7 +24,8 @@ export const TaskItemSchema = z.object({
 
 export const TaskClaimSchema = z.object({
   task_id: z.string().min(1),
-  node_id: z.string().min(1)
+  node_id: z.string().min(1),
+  display_name: z.string().optional()
 });
 
 export const TaskStatusUpdateSchema = z.object({

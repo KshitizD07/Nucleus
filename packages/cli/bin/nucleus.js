@@ -94,6 +94,7 @@ if (cli.command === "tasks") {
     url: cli.url,
     token: cli.token,
     lane: cli.lane,
+    name: cli.name,
     workspaceRoot: cli.workspace
   });
 

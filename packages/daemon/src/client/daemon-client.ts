@@ -161,10 +161,11 @@ export class DaemonClient {
     });
   }
 
-  public claimTask(taskId: string): void {
+  public claimTask(taskId: string, displayName?: string): void {
     this.send("task:claim", {
       task_id: taskId,
-      node_id: this.options.node_id
+      node_id: this.options.node_id,
+      display_name: displayName
     });
   }
 
