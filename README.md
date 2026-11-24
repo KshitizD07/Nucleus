@@ -113,6 +113,35 @@ The dialectic engine was pressure-tested across **20 continuous rounds (40 discr
 - **Living Axioms (`CONTRACT/axioms.md`)**: Reached consensus points are frozen in immutable contracts, preventing circular arguing and forcing agents into deeper physical and algorithmic layers.
 - **Natural Rhetorical Prose**: Built-in brevity and style guards eliminate sterile AI bullet headings (`**Premise:**`, `**Rebuttal:**`), enforcing authentic, articulate paragraphs.
 
+### How to Run an Autonomous Dialectic Session
+
+#### 1. Host the Room (Terminal 1 - Host / Arbiter)
+```powershell
+nucleus init --preset dialectic --topic "Your topic or architectural dilemma here"
+```
+
+#### 2. Launch the Autonomous Debaters (Terminals 2 & 3)
+Run your local AI agents (e.g. Claude Code, Gemini CLI, Antigravity) in the room workspace and give them their standing turn-taking loop prompts:
+
+- **Terminal 2 (Pro Debater Prompt):**
+  > *"You are the Pro debater in a live Oxford Union style dialectic debate. Run in an autonomous loop: Continuously monitor `.nucleus/tasks.json`. Whenever a task in lane `pro` is unassigned, claim it immediately using `nucleus claim <task-id> --lane pro`. Read Contra's latest argument in `arguments/` (or inspect live drafts in `.nucleus/shadows/contra/`), write your counter-argument in 1 to 2 natural, persuasive paragraphs (100–180 words, no analytical bullet headings), save it to `arguments/`, and mark the task status as `'in_review'`. If your next task is blocked, wait for Contra to finish. Continue this loop dynamically round after round."*
+
+- **Terminal 3 (Contra Debater Prompt):**
+  > *"You are the Contra debater in a live Oxford Union style dialectic debate. Run in an autonomous loop: Continuously monitor `.nucleus/tasks.json`. Whenever a task in lane `contra` is unassigned, claim it immediately using `nucleus claim <task-id> --lane contra`. Read Pro's latest argument in `arguments/` (or inspect live drafts in `.nucleus/shadows/pro/`), write your counter-argument in 1 to 2 natural, persuasive paragraphs (100–180 words, speaking directly to Pro without artificial bullet headings), save it to `arguments/`, and mark the task status as `'in_review'`. If your next task is blocked, wait for Pro to finish. Continue this loop dynamically round after round."*
+
+#### 3. Live Watch the Debate Stream (Terminal 4 - Live Audience)
+To watch new rounds stream onto your screen as they are written without screen resets or scroll snapping:
+
+```powershell
+# Append-only live stream of all arguments as they are saved
+$seen = @{}; while ($true) { Get-ChildItem arguments/*.md -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | ForEach-Object { if (-not $seen[$_.FullName]) { Write-Host "`n=================== $($_.Name) ===================" -ForegroundColor Cyan; Get-Content $_.FullName; $seen[$_.FullName] = $true } }; Start-Sleep -Seconds 1 }
+```
+
+Or stream raw coordination events (claims, reviews, approvals, dynamic spawns) via the room log:
+```powershell
+Get-Content -Path .nucleus/logs/*.jsonl -Wait -Tail 10
+```
+
 ---
 
 ## 🤖 How LLM Agents Auto-Discover Peer Code (`.nucleus/PEERS.md`)
