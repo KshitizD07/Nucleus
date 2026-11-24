@@ -16,7 +16,10 @@ export const TaskItemSchema = z.object({
   status: TaskStatusSchema,
   assigned_to: z.string().nullable().default(null),
   depends_on_contracts: z.array(z.string()).default([]),
-  branch: z.string().optional()
+  branch: z.string().optional(),
+  description: z.string().optional(),
+  spec_file: z.string().optional(),
+  spec_url: z.string().optional()
 });
 
 export const TaskClaimSchema = z.object({

@@ -77,11 +77,19 @@ export class PeersIndexManager {
       "",
       "## Instructions for AI Coding Agents",
       "",
+      "### 1. Task Specifications & Requirements",
+      "When claiming or working on an assigned task from `.nucleus/tasks.json`:",
+      "- **Inspect `spec_file`**: If the task has a `spec_file` (e.g. `CONTRACT/specs/<feature>.md`), read that file immediately from disk. It contains complete feature requirements, request/response schemas, error handling expectations, and acceptance criteria.",
+      "- **Inspect `spec_url`**: If the task points to a `spec_url` (e.g. Figma node, Linear issue, PRD), fetch or inspect the external specification before writing code.",
+      "- **Read `description`**: If a description is provided in `.nucleus/tasks.json`, treat it as authoritative task scope.",
+      "",
+      "### 2. Cross-Lane Counterpart Alignment",
       "When building features that interact with other lanes:",
       "1. **Do not guess API shapes, payload structures, or database schemas.**",
       "2. Check the table above. If a peer lane has counterpart code in progress, read their live uncommitted file directly from `.nucleus/shadows/<lane>/`.",
       "3. *Example:* If building a frontend screen, inspect `.nucleus/shadows/backend/<api-path>` to see the exact request body fields and response envelope.",
-      "4. The files in `.nucleus/shadows/` are synchronized live by the room daemon without needing Git commits or pushes.",
+      "4. Living shared contracts are in `CONTRACT/api.md` (replicated live across all room contributors).",
+      "5. The files in `.nucleus/shadows/` are synchronized live by the room daemon without needing Git commits or pushes.",
       ""
     );
 

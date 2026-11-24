@@ -30,6 +30,7 @@ describe("PeersIndexManager (Agent Context & Template Customization)", () => {
     expect(content).toContain("`src/api/auth.ts`");
     expect(content).toContain(".nucleus/shadows/backend/");
     expect(content).toContain("Instructions for AI Coding Agents");
+    expect(content).toContain("Inspect `spec_file`");
   });
 
   it("should incorporate custom project guidelines from CONTRACT/peers.template.md", () => {

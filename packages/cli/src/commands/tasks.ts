@@ -29,8 +29,11 @@ export function listTasks(workspaceRoot: string, filterLane?: string, filterStat
 
     for (const t of filtered) {
       const assigned = t.assigned_to || "unassigned";
+      let meta = "";
+      if (t.spec_file) meta += ` (spec: ${t.spec_file})`;
+      if (t.spec_url) meta += ` (url: ${t.spec_url})`;
       console.log(
-        `${t.id.padEnd(16)} | ${t.lane.padEnd(10)} | ${t.status.padEnd(14)} | ${assigned.padEnd(12)} | ${t.title}`
+        `${t.id.padEnd(16)} | ${t.lane.padEnd(10)} | ${t.status.padEnd(14)} | ${assigned.padEnd(12)} | ${t.title}${meta}`
       );
     }
     console.log(`================================================================================\n`);

@@ -1,0 +1,54 @@
+================================================================================
+SESSION LOG: SPEC FILE AND DESIGN URL INTEGRATION IN TASKS AND PEERS.MD
+================================================================================
+Date       : 2026-11-24
+Domain     : protocol
+Feature    : taskboard
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Enable developers and coordinators to associate rich specifications (`spec_file`, `spec_url`, `description`) with tasks.
+   - Allow large, detailed feature descriptions (Figma tokens, schemas, acceptance criteria) to live in dedicated Markdown files (e.g. `CONTRACT/specs/<feature>.md`) without bloating the task board JSON.
+   - Instruct AI coding agents in `.nucleus/PEERS.md` to automatically read local `spec_file` or inspect `spec_url` when claiming tasks.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - Updated `TaskItemSchema` in `packages/protocol/src/task.ts`:
+     - Added optional `spec_file?: string` (path to local spec on disk, e.g. `CONTRACT/specs/...`).
+     - Added optional `spec_url?: string` (URL to Figma, Linear, Notion, or PRD).
+     - Added optional `description?: string` (authoritative summary).
+   - Updated `PeersIndexManager` in `packages/daemon/src/shadow/peers-index.ts`:
+     - Added explicit section "1. Task Specifications & Requirements" in `PEERS.md`.
+     - Directs coding agents to inspect `spec_file` immediately upon claiming tasks and read it locally for schemas and acceptance criteria before generating code.
+   - Updated `packages/cli/src/commands/tasks.ts`:
+     - `listTasks` displays `(spec: ...)` or `(url: ...)` annotations in the terminal output.
+   - Added unit tests in `packages/protocol/src/protocol.test.ts` and `packages/daemon/src/shadow/peers-index.test.ts`.
+
+3. WHY BEHIND THE CHANGE
+   - Embedding massive multi-page specifications directly inside `.nucleus/tasks.json` bloats network payloads and wastes LLM token budgets on every heartbeat.
+   - Dedicated `CONTRACT/specs/*.md` files leverage Nucleus's existing live contract synchronization, ensuring all connected machines have the full spec locally with zero authentication or login walls.
+
+4. WHY NOT THE ALTERNATIVE(S)
+   - Ad-hoc prompt injection: Flaky, requires manual user intervention for each task claim, and doesn't persist across room restarts.
+   - Raw URL only: Fails behind SSO logins or anti-bot Cloudflare challenges. Supporting local `spec_file` alongside `spec_url` provides a bulletproof offline-first fallback.
+
+5. FILES MODIFIED / CREATED
+   - [CREATE] logs/protocol/taskboard/spec_file_and_task_guidance_2026-11-24.txt
+   - [MODIFY] packages/protocol/src/task.ts
+   - [MODIFY] packages/daemon/src/shadow/peers-index.ts
+   - [MODIFY] packages/daemon/src/client/daemon-client.ts
+   - [MODIFY] packages/cli/src/commands/tasks.ts
+   - [MODIFY] packages/protocol/src/protocol.test.ts
+   - [MODIFY] packages/daemon/src/shadow/peers-index.test.ts
+
+6. PROTOCOL / API / EVENT CHANGES (if applicable)
+   - `TaskItemSchema` extended with optional `spec_file`, `spec_url`, and `description`.
+
+7. TESTING & VERIFICATION
+   - Verified schema parsing with `spec_file`, `spec_url`, `description`.
+   - Verified `PEERS.md` rendering contains `Inspect spec_file` instructions.
+   - Tests passing: 10/10.
+
+8. NEXT STEPS / OPEN ITEMS
+   - Proceed with Feature 2: Task Archiving & Cleanup (`tasks_archive.json` and CLI pruning).
+================================================================================

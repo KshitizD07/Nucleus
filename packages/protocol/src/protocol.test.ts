@@ -39,18 +39,24 @@ describe("Protocol Envelopes and Schemas", () => {
     expect(() => ContractLockRequestSchema.parse(invalidLock)).toThrow();
   });
 
-  it("should parse task status correctly", () => {
+  it("should parse task status and spec fields correctly", () => {
     const task = {
       id: "task-01",
       title: "Implement auth middleware",
       lane: "backend",
       status: "active" as const,
       assigned_to: "Aryan",
-      depends_on_contracts: ["api.md"]
+      depends_on_contracts: ["api.md"],
+      spec_file: "CONTRACT/specs/auth.md",
+      spec_url: "https://figma.com/file/123",
+      description: "Detailed description of JWT requirements"
     };
 
     const parsed = TaskItemSchema.parse(task);
     expect(parsed.status).toBe("active");
+    expect(parsed.spec_file).toBe("CONTRACT/specs/auth.md");
+    expect(parsed.spec_url).toBe("https://figma.com/file/123");
+    expect(parsed.description).toBe("Detailed description of JWT requirements");
   });
 
   it("should validate live diff stream frame", () => {

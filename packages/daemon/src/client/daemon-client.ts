@@ -1,6 +1,6 @@
 import { WebSocket } from "ws";
 import { MessageEnvelopeSchema } from "@nucleus/protocol";
-import type { HelloPayload, HeartbeatPayload, RoomSnapshotPayload } from "@nucleus/protocol";
+import type { HelloPayload, HeartbeatPayload, RoomSnapshotPayload, TaskStatus } from "@nucleus/protocol";
 
 export type DaemonStatus = "idle" | "active" | "review";
 
@@ -168,7 +168,7 @@ export class DaemonClient {
     });
   }
 
-  public updateTaskStatus(taskId: string, status: "unassigned" | "assigned" | "active" | "in_review" | "changes_requested" | "approved", branch?: string): void {
+  public updateTaskStatus(taskId: string, status: TaskStatus, branch?: string): void {
     this.send("task:status", {
       task_id: taskId,
       status,
