@@ -17,6 +17,7 @@
 - [The Core Problem](#-the-core-problem)
 - [How Nucleus Works (The Pure Pull Model)](#-how-nucleus-works-the-pure-pull-model)
 - [Core Architecture & Capabilities](#-core-architecture--capabilities)
+- [Room Presets: Engineering, Architecture Audits & Dialectic Debates](#-room-presets-engineering-architecture-audits--dialectic-debates)
 - [How LLM Agents Auto-Discover Peer Code (`.nucleus/PEERS.md`)](#-how-llm-agents-auto-discover-peer-code-nucleuspeersmd)
 - [The Automated Critique Gate](#-the-automated-critique-gate)
 - [Quick Start Guide](#-quick-start-guide)
@@ -86,6 +87,31 @@ Instead, Nucleus uses an unprivileged, file-based **Pure Pull Model**:
 7. **Zero-Config Public Tunneling (`--tunnel`)**: Connect remote teammates anywhere in the world via automatic Cloudflare Tunnel fallback without router configuration or port forwarding.
 8. **Automated Task Board Archiving (`--clean`)**: Completed and reviewed tasks are archived to `.nucleus/tasks_archive.json` to keep active context clean and reduce LLM token overhead.
 9. **Secret Scanner & Guardrails**: Automatic detection blocks AWS keys, Stripe tokens, and private RSA keys before code is accepted.
+10. **Room Presets Architecture (`--preset`)**: Instantly adapt rooms for standard 3-tier monorepo engineering (`engineering`), architecture stress-testing & red-teaming (`dialectic`), or rapid product RFC discovery (`brainstorm`).
+
+---
+
+## 🏛️ Room Presets: Engineering, Architecture Audits & Dialectic Debates
+
+Nucleus extends beyond day-to-day feature coding into high-stakes **adversarial architecture auditing, red-team/blue-team reviews, and dialectic debates**:
+
+```powershell
+# Standard 3-tier software engineering room (default)
+nucleus init
+
+# Adversarial stress-testing & philosophical dialectic room
+nucleus init --preset dialectic --topic "Is human consciousness algorithmic?"
+
+# Collaborative product & architecture RFC brainstorm room
+nucleus init --preset brainstorm --topic "Distributed Consensus Protocol"
+```
+
+### Validated in Live Multi-Agent Stress Tests
+The dialectic engine was pressure-tested across **20 continuous rounds (40 discrete arguments and counter-rebuttals)** between independent autonomous AI agents (Pro and Contra) moderated by a judicial arbiter (`agy`):
+- **Turn-Taking Floor Enforcement**: Subordinate rounds are blocked in `.nucleus/tasks.json` until opponent arguments pass the Critique Gate.
+- **Dynamic Open-Ended Progression**: New rounds spawn dynamically round after round without manual user intervention until genuine synthesis or consensus is reached.
+- **Living Axioms (`CONTRACT/axioms.md`)**: Reached consensus points are frozen in immutable contracts, preventing circular arguing and forcing agents into deeper physical and algorithmic layers.
+- **Natural Rhetorical Prose**: Built-in brevity and style guards eliminate sterile AI bullet headings (`**Premise:**`, `**Rebuttal:**`), enforcing authentic, articulate paragraphs.
 
 ---
 
