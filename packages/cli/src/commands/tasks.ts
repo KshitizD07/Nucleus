@@ -39,7 +39,7 @@ export function listTasks(workspaceRoot: string, filterLane?: string, filterStat
   }
 }
 
-export function claimTaskLocally(workspaceRoot: string, taskId: string, assignedTo: string): boolean {
+export function claimTaskLocally(workspaceRoot: string, taskId: string, assignedTo: string, lane?: string): boolean {
   const tasksFile = path.resolve(workspaceRoot, ".nucleus", "tasks.json");
 
   if (!fs.existsSync(tasksFile)) {
@@ -54,6 +54,13 @@ export function claimTaskLocally(workspaceRoot: string, taskId: string, assigned
     const task = tasks.find((t) => t.id === taskId);
     if (!task) {
       console.error(`Error: Task "${taskId}" not found on board.`);
+      return false;
+    }
+
+    if (lane && task.lane !== lane) {
+      console.error(
+        `Error: Lane mismatch. You are operating in lane "${lane}", but task "${taskId}" belongs to lane "${task.lane}".`
+      );
       return false;
     }
 

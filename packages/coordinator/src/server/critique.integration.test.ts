@@ -74,6 +74,40 @@ describe("Milestone 4: Task Board Lifecycle & Disposable Worktree Critique Pipel
     expect(updatedTask.status).toBe("active");
     expect(updatedTask.assigned_to).toBe("node-worker");
 
+    // Attempting to claim from a different lane (e.g., frontend node claiming backend task)
+    const frontendToken = coordinator.issueInvite("frontend");
+    const feDaemon = new DaemonClient({
+      url: `ws://localhost:${TEST_PORT}`,
+      node_id: "node-frontend",
+      join_token: frontendToken,
+      workspace_path: CONTRIBUTOR_WS,
+      lane: "frontend"
+    });
+    await feDaemon.connect();
+
+    // Add another backend task
+    coordinator.getTaskBoard().addTask({
+      id: "task-auth-02",
+      title: "Backend Auth Task 2",
+      lane: "backend",
+      status: "unassigned",
+      assigned_to: null,
+      depends_on_contracts: []
+    });
+
+    const failedPromise = new Promise<any>((resolve) => {
+      feDaemon.onMessage = (type, payload) => {
+        if (type === "task:claim_failed") resolve(payload);
+      };
+    });
+
+    feDaemon.claimTask("task-auth-02");
+    const failedPayload = await failedPromise;
+    expect(failedPayload.task_id).toBe("task-auth-02");
+    expect(failedPayload.reason).toContain("Lane mismatch");
+
+    feDaemon.sever();
+
     // Apply into local replica
     taskReplica.applyUpdate(updatedTask);
     expect(taskReplica.getTask("task-auth-01")?.status).toBe("active");

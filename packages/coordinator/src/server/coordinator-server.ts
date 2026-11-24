@@ -264,7 +264,8 @@ export class CoordinatorServer {
 
   private handleTaskClaim(node_id: string, ws: WebSocket, payload: unknown): void {
     const claim = TaskClaimSchema.parse(payload);
-    const result = this.taskBoard.claimTask(claim.task_id, node_id);
+    const node = this.registry.get(node_id);
+    const result = this.taskBoard.claimTask(claim.task_id, node_id, undefined, node?.lane);
 
     if (result.success && result.task) {
       this.eventLog.append("task_claimed", { task_id: claim.task_id, node_id });

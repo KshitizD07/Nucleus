@@ -17,7 +17,7 @@ if (cli.command === "tasks") {
     process.exit(1);
   }
   const assignee = cli.name || process.env.USER || process.env.USERNAME || "contributor";
-  const ok = claimTaskLocally(cli.workspace || process.cwd(), cli.taskId, assignee);
+  const ok = claimTaskLocally(cli.workspace || process.cwd(), cli.taskId, assignee, cli.lane);
   process.exit(ok ? 0 : 1);
 } else if (cli.command === "init") {
   const runner = new InitRunner({

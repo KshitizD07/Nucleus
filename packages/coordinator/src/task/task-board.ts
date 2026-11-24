@@ -19,10 +19,16 @@ export class TaskBoardManager {
     this.persistToDisk();
   }
 
-  public claimTask(taskId: string, nodeId: string, branch?: string): { success: boolean; task?: TaskItem; reason?: string } {
+  public claimTask(taskId: string, nodeId: string, branch?: string, lane?: string): { success: boolean; task?: TaskItem; reason?: string } {
     const task = this.tasks.get(taskId);
     if (!task) {
       return { success: false, reason: `Task ${taskId} not found` };
+    }
+    if (lane && task.lane !== lane) {
+      return {
+        success: false,
+        reason: `Forbidden: Lane mismatch. Node '${nodeId}' in lane '${lane}' cannot claim task '${taskId}' belonging to lane '${task.lane}'`
+      };
     }
     if (task.assigned_to && task.assigned_to !== nodeId) {
       return { success: false, reason: `Task ${taskId} is already claimed by ${task.assigned_to}` };

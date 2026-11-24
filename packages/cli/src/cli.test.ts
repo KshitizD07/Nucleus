@@ -65,6 +65,10 @@ describe("Milestone 5: Developer CLI & Room Runner Integration", () => {
     const updated = JSON.parse(fs.readFileSync(`${nucleusDir}/tasks.json`, "utf8"));
     expect(updated[0].assigned_to).toBe("Rohan");
     expect(updated[0].status).toBe("active");
+
+    // Reject claim on lane mismatch
+    const rejected = claimTaskLocally(joinerWs, "task-test-01", "Alex", "frontend");
+    expect(rejected).toBe(false);
   });
 
   it("E2E CLI RUNNER: Host room with InitRunner and connect via JoinRunner", async () => {
