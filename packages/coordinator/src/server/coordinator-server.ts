@@ -284,9 +284,18 @@ export class CoordinatorServer {
       this.eventLog.append("task_claimed", { task_id: claim.task_id, node_id });
       this.broadcast(buildMessage(this.roomId, "coordinator", "task:status", result.task));
     } else {
+      const targetLane = node?.lane;
+      const availableTasks = targetLane
+        ? this.taskBoard
+            .getByLane(targetLane)
+            .filter((t) => !t.assigned_to || t.status === "unassigned")
+            .map((t) => t.id)
+        : [];
+
       ws.send(JSON.stringify(buildMessage(this.roomId, "coordinator", "task:claim_failed", {
         task_id: claim.task_id,
-        reason: result.reason
+        reason: result.reason,
+        available_tasks: availableTasks
       })));
     }
   }

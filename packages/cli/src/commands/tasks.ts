@@ -59,13 +59,29 @@ export function claimTaskLocally(workspaceRoot: string, taskId: string, assigned
 
     if (lane && task.lane !== lane) {
       console.error(
-        `Error: Lane mismatch. You are operating in lane "${lane}", but task "${taskId}" belongs to lane "${task.lane}".`
+        `\n⚠️ Lane mismatch: Task [${taskId}] belongs to '${task.lane}' lane, but your active lane is '${lane}'.`
       );
+      const availableUserLane = tasks
+        .filter((t) => t.lane === lane && (!t.assigned_to || t.status === "unassigned"))
+        .map((t) => t.id);
+      if (availableUserLane.length > 0) {
+        console.error(`Available tasks in '${lane}' lane: [${availableUserLane.join(", ")}]\n`);
+      } else {
+        console.error(`No unassigned tasks currently available in '${lane}' lane.\n`);
+      }
       return false;
     }
 
     if (task.assigned_to && task.assigned_to !== assignedTo) {
-      console.error(`Error: Task "${taskId}" is already assigned to "${task.assigned_to}".`);
+      console.error(`\n⚠️ Task [${taskId}] was already claimed by ${task.assigned_to}.`);
+      const availableSameLane = tasks
+        .filter((t) => t.lane === task.lane && (!t.assigned_to || t.status === "unassigned") && t.id !== taskId)
+        .map((t) => t.id);
+      if (availableSameLane.length > 0) {
+        console.error(`Available tasks in '${task.lane}' lane: [${availableSameLane.join(", ")}]\n`);
+      } else {
+        console.error(`No other unassigned tasks currently available in '${task.lane}' lane.\n`);
+      }
       return false;
     }
 

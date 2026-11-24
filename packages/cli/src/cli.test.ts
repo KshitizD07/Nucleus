@@ -70,6 +70,10 @@ describe("Milestone 5: Developer CLI & Room Runner Integration", () => {
     // Reject claim on lane mismatch
     const rejected = claimTaskLocally(joinerWs, "task-test-01", "Alex", "frontend");
     expect(rejected).toBe(false);
+
+    // Collision rejection: second contributor claims already claimed task
+    const collisionRejected = claimTaskLocally(joinerWs, "task-test-01", "Harsh", "backend");
+    expect(collisionRejected).toBe(false);
   });
 
   it("E2E CLI RUNNER: Host room with InitRunner and connect via JoinRunner", async () => {

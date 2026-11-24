@@ -105,6 +105,7 @@ describe("Milestone 4: Task Board Lifecycle & Disposable Worktree Critique Pipel
     const failedPayload = await failedPromise;
     expect(failedPayload.task_id).toBe("task-auth-02");
     expect(failedPayload.reason).toContain("Lane mismatch");
+    expect(Array.isArray(failedPayload.available_tasks)).toBe(true);
 
     feDaemon.sever();
 

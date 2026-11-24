@@ -56,14 +56,12 @@ These are the final polish tasks to complete the core MVP experience:
   - Added binary file extension filter and null-byte buffer inspection (git heuristic) to prevent binary diff streaming.
   - Verified with automated tests in `packages/daemon/src/watcher/diff-watcher.test.ts`.
 
-### 4. User-Friendly Task Collision Error Handling in CLI
+### 4. User-Friendly Task Collision Error Handling in CLI [COMPLETED]
 - **Issue:** The mutex engine correctly rejects concurrent claims atomically, but the contributor CLI output should provide clear guidance.
-- **Target Implementation:**
-  - Return informative messaging:
-    ```text
-    ⚠️ Task [task-ui-02] was just claimed by Harsh 150ms ago.
-    Available tasks in 'frontend' lane: [task-ui-03, task-ui-04].
-    ```
+- **Implementation Status:**
+  - Added informative terminal warnings in `packages/cli/src/commands/tasks.ts` and `JoinRunner` showing claimant name and available tasks in the contributor's lane.
+  - Updated coordinator server to include `available_tasks` array in `task:claim_failed` WebSocket events.
+  - Verified with automated tests in `packages/cli/src/cli.test.ts` and `critique.integration.test.ts`.
 
 ---
 
