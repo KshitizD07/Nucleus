@@ -1,0 +1,53 @@
+================================================================================
+SESSION LOG: ROBUST AUTO-RECONNECT ON SLEEP AND NETWORK SWITCH
+================================================================================
+Date       : 2026-11-24
+Domain     : daemon
+Feature    : network
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Resolve connection drops (code 1006 / ETIMEDOUT) during laptop lid close, sleep, or Wi-Fi network switching.
+   - Implement exponential backoff (1s, 2s, 4s, 8s, up to 30s) with jitter.
+   - Support token session reconnection in coordinator `InviteStore` without 4003 invalid token rejection.
+   - Seamlessly resume workspace file watcher upon reconnection without requiring manual terminal restarts.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - Updated `InviteStore`: added `bound_node_id` so that an invite consumed by a node remains valid for that exact node on re-auth/reconnect while unexpired, preventing 4003 "Invalid or expired join token" rejections.
+   - Updated `CoordinatorServer.handleConnection`: cleans up existing hanging sockets for the same node (`superseded_by_reconnect`), updates node heartbeat in `NodeRegistry`, and delivers a fresh `session:room_snapshot`.
+   - Updated `DaemonClient`: implemented exponential backoff (1s base, 2s, 4s, 8s, 16s, up to `maxReconnectIntervalMs` 30s) with randomization jitter. Attached persistent error listener to avoid unhandled EventEmitter exceptions during network churn. Added `baseReconnectIntervalMs` option.
+   - Updated `WorkspaceDiffWatcher`: added `resume()` method to re-attach `fs.watch` if dropped.
+   - Updated `JoinRunner`: set `onReconnect` callback to notify user and resume watcher.
+   - Updated `daemon-reconnect.test.ts`: verified abnormal closure (`ws.terminate()`), backoff scheduling, and successful reconnection.
+
+3. WHY BEHIND THE CHANGE
+   - Real-world developer mobility frequently causes Wi-Fi disconnects and laptop sleeps. Without resilient reconnection, developers and their AI agents were left stranded with dead sockets or forced to manually kill and re-launch daemons.
+   - Binding the invite token to the node ID preserves zero-credential transit while allowing authenticated reconnects.
+
+4. WHY NOT THE ALTERNATIVE(S)
+   - Infinite multi-use invite tokens: Would allow arbitrary unauthorized nodes to reuse tokens indefinitely, breaking room isolation.
+   - Immediate aggressive retry without backoff: Can trigger thundering herd against the coordinator server if network interfaces flap.
+
+5. FILES MODIFIED / CREATED
+   - [CREATE] logs/daemon/network/auto_reconnect_backoff_2026-11-24.txt
+   - [MODIFY] packages/coordinator/src/state/invite-store.ts
+   - [MODIFY] packages/coordinator/src/server/coordinator-server.ts
+   - [MODIFY] packages/daemon/src/client/daemon-client.ts
+   - [MODIFY] packages/daemon/src/watcher/diff-watcher.ts
+   - [MODIFY] packages/cli/src/commands/join.ts
+   - [MODIFY] packages/daemon/src/client/daemon-reconnect.test.ts
+
+6. PROTOCOL / API / EVENT CHANGES (if applicable)
+   - Coordinator supports reconnecting sessions for bound nodes.
+
+7. TESTING & VERIFICATION
+   - Executed `packages/daemon/src/client/daemon-reconnect.test.ts`: simulated socket drop via `terminate()`, verified reconnection attempt and successful room re-entry.
+   - Full test suite: 17 test suites, 58 tests passed.
+
+8. NEXT STEPS / OPEN ITEMS
+   - Proceed with remaining MVP action items:
+     - Item 2: Built-in Zero-Config Tunneling Fallback (`nucleus init --tunnel`).
+     - Item 3: Hardened Watcher Ignore Filter.
+     - Item 4: User-Friendly Task Collision Error Handling in CLI.
+================================================================================

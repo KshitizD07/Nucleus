@@ -34,11 +34,13 @@ This document outlines the **unvarnished operational assessment**, the **remaini
 
 These are the final polish tasks to complete the core MVP experience:
 
-### 1. Robust Auto-Reconnect on Sleep / Network Switch
+### 1. Robust Auto-Reconnect on Sleep / Network Switch [COMPLETED]
 - **Issue:** When a laptop lid closes or the Wi-Fi interface switches, contributor daemons drop the WebSocket connection with `1006` or `ETIMEDOUT`.
-- **Target Implementation:**
-  - Enhance `packages/daemon/src/client/` to implement exponential backoff reconnection (e.g., 1s, 2s, 4s, up to 30s max).
-  - Ensure local file watchers resume seamlessly once the socket re-establishes, without requiring a manual terminal restart.
+- **Implementation Status:**
+  - Implemented exponential backoff (1s, 2s, 4s, up to 30s max) with jitter in `packages/daemon/src/client/`.
+  - Added node-token binding in `InviteStore` so reconnecting daemons re-authenticate seamlessly without 4003 token errors.
+  - Added watcher resumption in `WorkspaceDiffWatcher.resume()` and `JoinRunner.onReconnect`.
+  - Verified with automated test in `daemon-reconnect.test.ts`.
 
 ### 2. Built-in Zero-Config Tunneling Fallback (`nucleus init --tunnel`)
 - **Issue:** Manual IP lookups and router subnet mismatches cause connection confusion.

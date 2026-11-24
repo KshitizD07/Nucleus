@@ -5,6 +5,7 @@ export interface InviteToken {
   lane: string;
   expires_at: number;
   used: boolean;
+  bound_node_id?: string;
 }
 
 export class InviteStore {
@@ -26,15 +27,24 @@ export class InviteStore {
     return token;
   }
 
-  public consume(token: string): InviteToken | null {
+  public consume(token: string, nodeId?: string): InviteToken | null {
     const invite = this.tokens.get(token);
     if (!invite) return null;
-    if (invite.used) return null;
     if (Date.now() > invite.expires_at) {
       this.tokens.delete(token);
       return null;
     }
+    if (invite.used) {
+      // Allow reconnect if the token was previously bound to this specific nodeId
+      if (nodeId && invite.bound_node_id === nodeId) {
+        return invite;
+      }
+      return null;
+    }
     invite.used = true;
+    if (nodeId) {
+      invite.bound_node_id = nodeId;
+    }
     return invite;
   }
 

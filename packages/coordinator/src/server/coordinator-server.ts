@@ -93,7 +93,7 @@ export class CoordinatorServer {
         }
 
         const hello = HelloPayloadSchema.parse(envelope.payload);
-        const invite = this.invites.consume(hello.join_token);
+        const invite = this.invites.consume(hello.join_token, hello.node_id);
 
         if (!invite) {
           ws.close(4003, "Invalid or expired join token");
@@ -101,18 +101,29 @@ export class CoordinatorServer {
         }
 
         const node_id = hello.node_id;
+        const existingWs = this.sockets.get(node_id);
+        if (existingWs && existingWs !== ws) {
+          try {
+            existingWs.removeAllListeners();
+            existingWs.close(1000, "superseded_by_reconnect");
+          } catch {}
+        }
         this.sockets.set(node_id, ws);
 
-        this.registry.register({
-          node_id,
-          lane: hello.lane,
-          status: "idle",
-          task_id: null,
-          contract_version: 0,
-          active_file: null
-        });
-
-        this.eventLog.append("node_joined", { node_id, lane: hello.lane });
+        const existingNode = this.registry.get(node_id);
+        if (!existingNode) {
+          this.registry.register({
+            node_id,
+            lane: hello.lane,
+            status: "idle",
+            task_id: null,
+            contract_version: 0,
+            active_file: null
+          });
+          this.eventLog.append("node_joined", { node_id, lane: hello.lane });
+        } else {
+          this.registry.updateHeartbeat(node_id, { status: "idle" });
+        }
 
         const contracts = this.contractStore.getAll().map((c) => ({
           file_path: c.filePath,
@@ -139,18 +150,20 @@ export class CoordinatorServer {
 
         ws.send(JSON.stringify(snapshot));
 
-        this.broadcast(
-          buildMessage(this.roomId, "coordinator", "session:peer_joined", {
-            node_id,
-            lane: hello.lane
-          }),
-          node_id
-        );
+        if (!existingNode) {
+          this.broadcast(
+            buildMessage(this.roomId, "coordinator", "session:peer_joined", {
+              node_id,
+              lane: hello.lane
+            }),
+            node_id
+          );
+        }
 
         ws.on("message", (data) => this.handleMessage(node_id, ws, data.toString()));
         ws.on("close", () => this.handleDisconnect(node_id));
 
-        console.log(`[Coordinator] Node joined: ${node_id} (lane: ${hello.lane})`);
+        console.log(`[Coordinator] Node ${existingNode ? "reconnected" : "joined"}: ${node_id} (lane: ${hello.lane})`);
       } catch (err) {
         ws.close(4000, "Invalid handshake");
       }

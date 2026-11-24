@@ -12,6 +12,7 @@ export interface DaemonClientOptions {
   lane: string;
   heartbeatIntervalMs?: number;
   autoReconnect?: boolean;
+  baseReconnectIntervalMs?: number;
   maxReconnectIntervalMs?: number;
 }
 
@@ -36,6 +37,7 @@ export class DaemonClient {
     this.options = {
       heartbeatIntervalMs: 2000,
       autoReconnect: true,
+      baseReconnectIntervalMs: 1000,
       maxReconnectIntervalMs: 30_000,
       ...options
     };
@@ -64,9 +66,11 @@ export class DaemonClient {
         }
       });
 
-      this.ws.once("error", (err) => {
+      this.ws.on("error", (err) => {
         if (onInitialFail) {
           onInitialFail(err);
+        } else {
+          console.warn(`[Daemon] Socket error: ${err.message}`);
         }
       });
 
@@ -96,11 +100,11 @@ export class DaemonClient {
     if (this.isSevered || this.reconnectTimer) return;
 
     this.reconnectAttempts++;
-    // Exponential backoff: 500ms, 1000ms, 2000ms, up to maxReconnectIntervalMs
-    const delay = Math.min(
-      500 * Math.pow(2, this.reconnectAttempts - 1),
-      this.options.maxReconnectIntervalMs
-    );
+    // Exponential backoff: 1s, 2s, 4s, 8s, 16s, up to maxReconnectIntervalMs (default 30s)
+    const base = this.options.baseReconnectIntervalMs;
+    const exp = base * Math.pow(2, Math.min(this.reconnectAttempts - 1, 5));
+    const jitter = Math.floor(Math.random() * (base > 100 ? 200 : 10));
+    const delay = Math.min(exp + jitter, this.options.maxReconnectIntervalMs);
 
     console.log(`[Daemon] Connection lost. Reconnecting in ${delay}ms (attempt #${this.reconnectAttempts})...`);
 

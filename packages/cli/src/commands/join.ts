@@ -116,7 +116,18 @@ export class JoinRunner {
         } else {
           console.log(`[Tasks] Task [${payload.id}] -> status: ${payload.status}`);
         }
+      } else if (type === "task:claim_failed") {
+        console.error(`\n⚠️ Task claim rejected: ${payload.reason}`);
+        if (payload.available_tasks && payload.available_tasks.length > 0) {
+          console.error(`Available tasks in your lane: [${payload.available_tasks.join(", ")}]\n`);
+        }
       }
+    };
+
+    this.client.onReconnect = () => {
+      console.log(`\n🔄 [Nucleus] Successfully reconnected to room!`);
+      this.diffWatcher?.resume();
+      console.log(`[Nucleus] Workspace watcher active. Context published to .nucleus/PEERS.md\n`);
     };
 
     await this.client.connect();

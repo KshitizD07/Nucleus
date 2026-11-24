@@ -29,19 +29,27 @@ describe("Daemon Auto-Reconnect Lifecycle", () => {
       join_token: token,
       workspace_path: "./test_ws",
       lane: "backend",
-      autoReconnect: true
+      autoReconnect: true,
+      baseReconnectIntervalMs: 50
     });
 
     let reconnected = false;
-    daemon.onReconnect = () => {
-      reconnected = true;
-    };
+    const reconnectPromise = new Promise<void>((resolve) => {
+      daemon.onReconnect = () => {
+        reconnected = true;
+        resolve();
+      };
+    });
 
     await daemon.connect();
-
-    // Reconnection token support in coordinator invite store:
-    // When the socket drops unexpectedly without sever(), daemon schedules reconnect
     expect(daemon).toBeDefined();
+
+    // Simulate unexpected socket drop (e.g., Wi-Fi drop or laptop sleep: socket terminate)
+    (daemon as any).ws.terminate();
+
+    // Await auto-reconnection
+    await reconnectPromise;
+    expect(reconnected).toBe(true);
 
     daemon.sever();
     await new Promise((r) => setTimeout(r, 100));

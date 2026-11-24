@@ -80,6 +80,12 @@ export class WorkspaceDiffWatcher {
     this.debounceTimers.clear();
   }
 
+  public resume(): void {
+    if (!this.watcher) {
+      this.start();
+    }
+  }
+
   private isIgnored(filePath: string): boolean {
     return this.ignoredPatterns.some((pattern) => filePath.startsWith(pattern) || filePath.includes(`/${pattern}/`));
   }
