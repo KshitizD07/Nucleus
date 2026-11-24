@@ -51,7 +51,13 @@ export class TaskBoardManager {
     return { success: true, task };
   }
 
-  public updateStatus(taskId: string, status: TaskStatus, branch?: string): { success: boolean; task?: TaskItem; reason?: string } {
+  public updateStatus(taskId: string, status: TaskStatus, branch?: string): {
+    success: boolean;
+    task?: TaskItem;
+    reason?: string;
+    unblockedTasks?: TaskItem[];
+    spawnedTasks?: TaskItem[];
+  } {
     const task = this.tasks.get(taskId);
     if (!task) {
       return { success: false, reason: `Task ${taskId} not found` };
@@ -62,6 +68,9 @@ export class TaskBoardManager {
       task.assigned_to = null;
     }
     if (branch) task.branch = branch;
+
+    const unblockedTasks: TaskItem[] = [];
+    const spawnedTasks: TaskItem[] = [];
 
     // When a task is approved, auto-unblock any dependent tasks whose requirements are met
     if (status === "approved") {
@@ -74,13 +83,49 @@ export class TaskBoardManager {
           });
           if (allDepsMet) {
             other.status = "unassigned";
+            unblockedTasks.push(other);
           }
+        }
+      }
+
+      // Dynamic Dialectic Evolution: If a contra round is approved, check if next round pair should spawn
+      const contraMatch = taskId.match(/^round-(\d+)-contra$/i);
+      if (contraMatch) {
+        const roundNum = parseInt(contraMatch[1], 10);
+        const nextRoundNum = roundNum + 1;
+        const nextProId = `round-${String(nextRoundNum).padStart(2, "0")}-pro`;
+        const nextContraId = `round-${String(nextRoundNum).padStart(2, "0")}-contra`;
+
+        const hasSynthesis = Array.from(this.tasks.values()).some((t) => t.lane === "judge" && t.status === "approved");
+        if (!this.tasks.has(nextProId) && !hasSynthesis && nextRoundNum <= 50) {
+          const proTask: TaskItem = {
+            id: nextProId,
+            title: `Round ${nextRoundNum} (Pro): Defense & Deeper Argument [Natural Prose, 100-180 words]`,
+            lane: "pro",
+            status: "unassigned",
+            assigned_to: null,
+            depends_on_contracts: [taskId],
+            description: `Address Contra's critique from round ${roundNum}. Advance your argument naturally in 1-2 paragraphs using vivid analogies. Avoid rigid headings.`
+          };
+          const contraTask: TaskItem = {
+            id: nextContraId,
+            title: `Round ${nextRoundNum} (Contra): Counter-Critique & Pressure Test [Natural Prose, 100-180 words]`,
+            lane: "contra",
+            status: "blocked",
+            assigned_to: null,
+            depends_on_contracts: [nextProId],
+            description: `Pressure-test Pro's round ${nextRoundNum} argument. Identify hidden assumptions or edge cases. Write in 1-2 natural paragraphs without headers.`
+          };
+
+          this.tasks.set(proTask.id, proTask);
+          this.tasks.set(contraTask.id, contraTask);
+          spawnedTasks.push(proTask, contraTask);
         }
       }
     }
 
     this.persistToDisk();
-    return { success: true, task };
+    return { success: true, task, unblockedTasks, spawnedTasks };
   }
 
   public getTask(taskId: string): TaskItem | undefined {

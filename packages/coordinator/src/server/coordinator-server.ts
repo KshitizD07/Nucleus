@@ -308,6 +308,17 @@ export class CoordinatorServer {
       this.eventLog.append("task_status_changed", { task_id: update.task_id, status: update.status, node_id });
       this.broadcast(buildMessage(this.roomId, "coordinator", "task:status", result.task));
 
+      if (result.unblockedTasks) {
+        for (const t of result.unblockedTasks) {
+          this.broadcast(buildMessage(this.roomId, "coordinator", "task:status", t));
+        }
+      }
+      if (result.spawnedTasks) {
+        for (const t of result.spawnedTasks) {
+          this.broadcast(buildMessage(this.roomId, "coordinator", "task:status", t));
+        }
+      }
+
       if (update.status === "in_review") {
         this.runAutomatedCritique(result.task, node_id);
       }
@@ -361,6 +372,17 @@ export class CoordinatorServer {
       if (updated.success && updated.task) {
         this.eventLog.append("task_status_changed", { task_id: task.id, status: newStatus, node_id: "critique-gate" });
         this.broadcast(buildMessage(this.roomId, "coordinator", "task:status", updated.task));
+
+        if (updated.unblockedTasks) {
+          for (const t of updated.unblockedTasks) {
+            this.broadcast(buildMessage(this.roomId, "coordinator", "task:status", t));
+          }
+        }
+        if (updated.spawnedTasks) {
+          for (const t of updated.spawnedTasks) {
+            this.broadcast(buildMessage(this.roomId, "coordinator", "task:status", t));
+          }
+        }
       }
 
       if (result.verdict === "approved") {

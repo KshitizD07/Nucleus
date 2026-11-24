@@ -182,12 +182,12 @@ describe("Milestone 5: Developer CLI & Room Runner Integration", () => {
 
     const topicContent = fs.readFileSync(`${dialecticWs}/CONTRACT/topic.md`, "utf8");
     expect(topicContent).toContain("Is human consciousness algorithmic?");
-    expect(topicContent).toContain("**Strict Conciseness:** Maximum 150-200 words");
+    expect(topicContent).toContain("Natural Conversational Prose (No Sterile Headings)");
 
-    // Verify tasks generated with turn-taking blocking
+    // Verify initial round pair generated with turn-taking blocking
     const tasksRaw = fs.readFileSync(`${dialecticWs}/.nucleus/tasks.json`, "utf8");
     const tasks = JSON.parse(tasksRaw);
-    expect(tasks.length).toBe(5);
+    expect(tasks.length).toBe(2);
 
     const round1Pro = tasks.find((t: any) => t.id === "round-01-pro");
     const round1Contra = tasks.find((t: any) => t.id === "round-01-contra");
@@ -202,7 +202,7 @@ describe("Milestone 5: Developer CLI & Room Runner Integration", () => {
     const proClaimOk = claimTaskLocally(dialecticWs, "round-01-pro", "ProAgent", "pro");
     expect(proClaimOk).toBe(true);
 
-    // Coordinator unblocks dependent tasks when round 1 is approved
+    // Coordinator unblocks dependent tasks when round 1 pro is approved
     const server = host["coordinator"];
     expect(server).toBeDefined();
     server!.getTaskBoard().updateStatus("round-01-pro", "approved");
@@ -210,11 +210,22 @@ describe("Milestone 5: Developer CLI & Room Runner Integration", () => {
     const updatedContra = server!.getTaskBoard().getTask("round-01-contra");
     expect(updatedContra?.status).toBe("unassigned");
 
-    // Now Contra can claim!
-    // Write back to disk to simulate sync
+    // Now Contra can claim round 1 contra!
     fs.writeFileSync(`${dialecticWs}/.nucleus/tasks.json`, JSON.stringify(server!.getTaskBoard().getAll(), null, 2), "utf8");
     const contraClaimOk = claimTaskLocally(dialecticWs, "round-01-contra", "ContraAgent", "contra");
     expect(contraClaimOk).toBe(true);
+
+    // When round 1 contra is approved, Round 2 automatically and dynamically spawns!
+    const contraApprovalResult = server!.getTaskBoard().updateStatus("round-01-contra", "approved");
+    expect(contraApprovalResult.spawnedTasks).toBeDefined();
+    expect(contraApprovalResult.spawnedTasks!.length).toBe(2);
+
+    const round2Pro = server!.getTaskBoard().getTask("round-02-pro");
+    const round2Contra = server!.getTaskBoard().getTask("round-02-contra");
+    expect(round2Pro).toBeDefined();
+    expect(round2Pro?.status).toBe("unassigned");
+    expect(round2Contra).toBeDefined();
+    expect(round2Contra?.status).toBe("blocked");
 
     const invitePro = inviteCommand("pro");
     expect(invitePro).toContain("--lane pro");

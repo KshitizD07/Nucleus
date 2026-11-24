@@ -14,12 +14,12 @@ export const dialecticPreset: RoomPreset = {
 
 **Resolution:** (Topic under investigation)
 
-## Protocols for Engaged LLM Agents
-1. **Atomic Turn-Taking:** Neither side may submit an argument while the opponent's round is active.
-2. **Strict Conciseness:** Maximum 150-200 words per turn. State 1 Premise, 1 Argument/Evidence, and 1 Conclusion.
-3. **Deconstruct, Don't Dump:** Break complex ideas down turn by turn. Do NOT write long essays.
-4. **Living Axioms:** When an argument or premise is verified by the Judge, it is locked into \`CONTRACT/axioms.md\`.
-5. **Real-Time Shadow Visibility:** Inspect your opponent's live drafting in \`.nucleus/shadows/<lane>/\` to formulate counter-arguments in real time.
+## Protocols for Engaged Debaters
+1. **Natural Conversational Prose (No Sterile Headings):** Write in 1 to 2 articulate, flowing paragraphs. Never use artificial analytical headings like \`**Premise:**\`, \`**Rebuttal:**\`, or \`**Conclusion:**\`. Argue like a sharp, persuasive human intellectual in a live Oxford Union debate or deep podcast.
+2. **Direct Engagement:** Speak directly to your counterpart. Use vivid analogies, real-world examples, and counter-factuals.
+3. **Atomic Conciseness (100–180 Words Max):** Make one focused point per turn so the debate progresses with high cognitive density.
+4. **Dynamic Open-Ended Evolution:** The debate continues round-by-round until a genuine breakthrough, middle-ground axiom, or synthesis is reached.
+5. **Living Axioms:** When both sides agree on a factual point, it is locked into \`CONTRACT/axioms.md\`.
 `
     },
     {
@@ -44,56 +44,31 @@ The active speaker holds the lease lock on this contract file during their turn.
     return [
       {
         id: "round-01-pro",
-        title: `Round 1 (Pro): Opening Thesis & Primary Premise for ${topicTitle} [Max 150 words]`,
+        title: `Round 1 (Pro): Opening Thesis for ${topicTitle} [Natural Prose, 100-180 words]`,
         lane: "pro",
         status: "unassigned",
         assigned_to: null,
         depends_on_contracts: ["CONTRACT/topic.md"],
-        description: "Present your primary thesis statement and the first foundational premise supporting the resolution. Keep strictly under 150 words."
+        description: "State your core thesis naturally in 1-2 articulate paragraphs. Use a vivid real-world analogy. Avoid rigid headings."
       },
       {
         id: "round-01-contra",
-        title: `Round 1 (Contra): Targeted Rebuttal & Opposing Premise [Max 150 words]`,
+        title: `Round 1 (Contra): Opening Challenge & Counter-Perspective [Natural Prose, 100-180 words]`,
         lane: "contra",
         status: "blocked",
         assigned_to: null,
         depends_on_contracts: ["round-01-pro"],
-        description: "Inspect Pro's argument in .nucleus/shadows/pro/. Identify flaws in Premise 1 and present your first counter-premise. Keep strictly under 150 words."
-      },
-      {
-        id: "round-02-pro",
-        title: `Round 2 (Pro): Defense, Syllogism Refinement & Secondary Premise [Max 150 words]`,
-        lane: "pro",
-        status: "blocked",
-        assigned_to: null,
-        depends_on_contracts: ["round-01-contra"],
-        description: "Defend against Contra's counter-premise and advance a secondary supporting argument. Keep strictly under 150 words."
-      },
-      {
-        id: "round-02-contra",
-        title: `Round 2 (Contra): Cross-Examination & Counter-Synthesis [Max 150 words]`,
-        lane: "contra",
-        status: "blocked",
-        assigned_to: null,
-        depends_on_contracts: ["round-02-pro"],
-        description: "Rebut Pro's secondary argument, summarize contradictions in their position, and conclude your case. Keep strictly under 150 words."
-      },
-      {
-        id: "round-synthesis",
-        title: `Round 3 (Judge): Judicial Verdict, Logical Evaluation & Emergent Truth`,
-        lane: "judge",
-        status: "blocked",
-        assigned_to: null,
-        depends_on_contracts: ["round-02-contra"],
-        description: "Evaluate both sides line-by-line, award scores for logical validity, and document the emergent synthesis in SYNTHESIS.md."
+        description: "Directly challenge Pro's opening thesis with a sharp counter-analogy and alternative explanation. Write in natural conversational paragraphs without headers."
       }
     ];
   },
   peersTemplate: `
-### Dialectic Collaboration & Turn Rules
-- **Atomic Conciseness (Strict 150-200 Word Limit)**: Do NOT produce long essays. Formulate exactly 1 premise + 1 argument + 1 conclusion per turn.
+### Dialectic Collaboration & Natural Human Dialogue Rules
+- **Natural Conversational Prose (No Rigid Headings)**: Write in 1 to 2 cohesive, natural paragraphs. Do NOT use artificial bullet headings like \`**Premise:**\`, \`**Rebuttal:**\`, or \`**Conclusion:**\`. Argue like an articulate thinker in a live debate.
+- **Direct & Persuasive**: Speak directly to your opponent. Attack their specific claims with vivid analogies, counter-examples, and sharp reasoning (e.g. "The fundamental flaw in your point is...", "Consider this concrete example...").
+- **Conciseness (100–180 Words Max)**: Keep each turn punchy. Make one clear, powerful point at a time so your opponent can engage directly.
 - **Turn-Taking Floor Enforcement**: Do not claim or submit your round until the preceding round on the board is marked approved.
-- **Real-Time Shadow Inspection**: Read your counterpart's live drafting in \`.nucleus/shadows/pro/\` or \`.nucleus/shadows/contra/\`.
+- **Real-Time Opponent Awareness**: Read your counterpart's live drafting in \`.nucleus/shadows/pro/\` or \`.nucleus/shadows/contra/\`.
 - **Axiom Non-Contradiction**: Never contradict established truths locked in \`CONTRACT/axioms.md\`.
 `,
   sampleInviteGuidance: (inviteCommand, hostUrl) => [

@@ -56,6 +56,17 @@ export class StaticRuleCriticProvider implements LLMCriticProvider {
           suggested_fix: "Deconstruct your argument into atomic premises. Keep this turn concise (under 200 words) so your counterpart can address a single focused claim."
         });
       }
+
+      // 4. Natural Dialogue Guard: Flag robotic AI template headings
+      const roboticPattern = /\*\*(?:Premise|Counter-Premise|Rebuttal|Conclusion)(?:\s*\d*)?:\*\*/i;
+      if (roboticPattern.test(addedText)) {
+        findings.push({
+          severity: "warning",
+          file: "(dialectic-round)",
+          message: "Artificial AI template headings detected (e.g. '**Premise:**', '**Conclusion:**').",
+          suggested_fix: "Write in natural, conversational paragraphs speaking directly to your opponent like a real human thinker in a live debate, without rigid bullet headings."
+        });
+      }
     }
 
     return findings;
