@@ -2,7 +2,7 @@
 
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/typescript-%5E5.4-blue.svg)](https://www.typescriptlang.org/)
-[![Test Suite](https://img.shields.io/badge/tests-58%2F58%20passing-success.svg)](packages/coordinator/src/server/deep-audit.test.ts)
+[![Test Suite](https://img.shields.io/badge/tests-73%2F73%20passing-success.svg)](packages/cli/src/system-audit.test.ts)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)](LICENSE)
 [![Architecture](https://img.shields.io/badge/architecture-P2P%20Pure%20Pull%20Model-purple.svg)](docs/multiplayer-room-architecture.md)
 
@@ -79,9 +79,13 @@ Instead, Nucleus uses an unprivileged, file-based **Pure Pull Model**:
 
 1. **Sub-Millisecond Live Diff Streaming**: As an engineer or agent types, local file changes are diff-compressed and streamed over WebSocket (>1,100 msgs/sec benchmarked, <7ms fanout latency).
 2. **Cross-Lane Shadow Mirrors (`.nucleus/shadows/<lane>/`)**: Frontend agents inspect live, uncommitted backend code directly on disk without waiting for Git commits or PRs.
-3. **Workspace Jail**: Strict path-traversal sandboxing prevents agents in one lane from overwriting or modifying files belonging to other lanes.
+3. **Workspace Jail & Non-Bypassable Ignores**: Strict sandboxing prevents agents from modifying files outside their lane, with non-bypassable ignore lists and binary null-byte filters.
 4. **Living Contracts (`CONTRACT/`)**: Shared schema definitions (OpenAPI, Prisma, event formats) are guarded by distributed lease mutexes (15s TTL auto-recovery).
-5. **Secret Scanner & Guardrails**: Automatic detection blocks AWS keys, Stripe tokens, and private RSA keys before code is accepted.
+5. **Detailed Spec Files & Design URLs**: Tasks support `spec_file` (e.g. `CONTRACT/specs/...`) and `spec_url` (Figma / PRD links), automatically injected into `.nucleus/PEERS.md` so agents read full specs before writing code.
+6. **Bidirectional Task Synchronization**: Changes made to `.nucleus/tasks.json` by developers or AI agents are observed in real time and broadcasted over the coordinator WebSocket.
+7. **Zero-Config Public Tunneling (`--tunnel`)**: Connect remote teammates anywhere in the world via automatic Cloudflare Tunnel fallback without router configuration or port forwarding.
+8. **Automated Task Board Archiving (`--clean`)**: Completed and reviewed tasks are archived to `.nucleus/tasks_archive.json` to keep active context clean and reduce LLM token overhead.
+9. **Secret Scanner & Guardrails**: Automatic detection blocks AWS keys, Stripe tokens, and private RSA keys before code is accepted.
 
 ---
 
@@ -138,21 +142,29 @@ npm link
 
 ### 2. Host a Room (Tech Lead / Initiator)
 ```powershell
-# Open room in current project directory
+# Open room locally on local network / Wi-Fi
 nucleus init --port 9876
+
+# Or host with zero-config public internet tunnel for remote teammates
+nucleus init --tunnel
 ```
-*(The host prints your local Wi-Fi IP and automatically initializes `.nucleus/tasks.json` and `CONTRACT/api.md`.)*
+*(The host prints your local Wi-Fi and public tunnel URLs and automatically initializes `.nucleus/tasks.json` and `CONTRACT/api.md`.)*
 
 ### 3. Invite Team Members
 In another terminal, issue single-use tokens for assigned lanes:
 ```powershell
 nucleus invite --lane frontend
+nucleus invite --lane backend
 nucleus invite --lane database
 ```
 
 ### 4. Join a Room (Contributor Laptop)
 ```powershell
+# Connect to local Wi-Fi host
 nucleus join --url ws://<HOST_IP>:9876 --token <TOKEN> --lane frontend --name "Harsh"
+
+# Or connect to public internet tunnel host
+nucleus join --url wss://<TUNNEL_URL>.trycloudflare.com --token <TOKEN> --lane frontend --name "Harsh"
 ```
 
 Once connected, run your local AI agent (Claude Code, Antigravity, Aider) in the workspace and prompt it to pick up tasks from `.nucleus/tasks.json`.
@@ -163,11 +175,12 @@ Once connected, run your local AI agent (Claude Code, Antigravity, Aider) in the
 
 | Command | Options | Description |
 | :--- | :--- | :--- |
-| `nucleus init` | `-p, --port <port>`<br/>`-r, --room <name>` | Open and host a multiplayer room for the current project |
+| `nucleus init` | `-p, --port <port>`<br/>`-r, --room <name>`<br/>`--tunnel` | Open and host a multiplayer room (with optional public internet tunnel) |
 | `nucleus join` | `-u, --url <url>`<br/>`-t, --token <token>`<br/>`-l, --lane <lane>`<br/>`-n, --name <name>` | Connect local workspace to an active room |
 | `nucleus invite` | `-l, --lane <lane>` | Generate a secure single-use join token |
-| `nucleus tasks` | *none* | View current task board state and lane assignments |
-| `nucleus claim` | `<task_id>` | Claim an unassigned task for your lane |
+| `nucleus tasks` | `-c, --clean`<br/>`-a, --archived`<br/>`-l, --lane <lane>` | View task board, archive approved tasks (`--clean`), or view past work (`--archived`) |
+| `nucleus claim` | `<task_id>` | Claim an available task for your lane (lane-enforced) |
+| `nucleus release` | `<task_id>` | Release/unclaim a claimed task back to unassigned |
 | `nucleus status` | *none* | Show active room peers, connected lanes, and locks |
 
 ---
@@ -185,10 +198,13 @@ nucleus/
 ├── .nucleus/              # Runtime coordination directory (auto-managed)
 │   ├── PEERS.md           # Live peer roster & active file index (read by agents)
 │   ├── tasks.json         # Shared room task board
+│   ├── tasks_archive.json # Historical archive of completed and approved tasks
+│   ├── session.json       # Local node identity and active lane state
 │   ├── shadows/           # Real-time uncommitted file mirrors from peer lanes
 │   └── critiques/         # Formal verification and audit reports
 ├── CONTRACT/              # The Living Blueprint (frozen endpoints & schemas)
-│   └── api.md             # API specifications and payload envelopes
+│   ├── api.md             # API specifications and payload envelopes
+│   └── specs/             # Detailed PRD / Figma specification handoff documents
 └── docs/                  # Architecture specifications & deep system audits
 ```
 
@@ -197,7 +213,7 @@ nucleus/
 ## 🧪 Engineering Protocols & Verification
 
 Nucleus is built under strict distributed systems standards:
-- **Comprehensive Test Suite:** 17 test suites and **58 tests passing** (Vitest).
+- **Comprehensive Test Suite:** 19 test suites and **73 tests passing** (Vitest).
 - **Stress & Throughput Benchmarks:** Validated under 200 diff bursts at >1,100 messages/sec with sub-7ms broadcast latency.
 - **Jailbreak Defense:** 100% path-traversal prevention (`../` and symlink escapes blocked).
 - **Concurrency Safety:** Multi-node mutex tests verify 1 lease winner, 0 race conditions, and automatic lease recovery on disconnect.
@@ -218,5 +234,6 @@ For full details, see [ROADMAP_AND_MVP_STATUS.md](ROADMAP_AND_MVP_STATUS.md).
 - [x] **Milestone 3:** Real-time WIP diff streaming and `.nucleus/PEERS.md` context injection.
 - [x] **Milestone 4:** Task state machine and Automated Critique Gate review pipeline.
 - [x] **Milestone 5:** Developer CLI (`nucleus init`, `join`, `invite`).
-- [ ] **Final MVP Polish:** Exponential backoff auto-reconnect, zero-config `--tunnel` flag, and hardened watcher ignores.
+- [x] **Final MVP Polish:** Exponential backoff auto-reconnect, zero-config `--tunnel` flag, task cleanup (`--clean`), spec file support, and hardened watcher ignores.
+- [ ] **Beyond MVP (v1.x):** Ephemeral Docker test runner sidecars, multi-repo support, and WebRTC P2P mesh.
 - [ ] **Beyond MVP (v1.x):** Ephemeral Docker test runner sidecars, multi-repo support, and WebRTC P2P mesh.
