@@ -220,6 +220,18 @@ export class CoordinatorServer {
         return;
       }
 
+      if (envelope.type === "sharing:lane_shadow_sync") {
+        try {
+          const sync = envelope.payload as { source_lane: string; file_path: string; content: string; version: number };
+          const taskStorageDir = path.dirname(this.taskBoard.getStoragePath());
+          const shadowFile = path.join(taskStorageDir, "shadows", sync.source_lane, sync.file_path);
+          fs.mkdirSync(path.dirname(shadowFile), { recursive: true });
+          fs.writeFileSync(shadowFile, sync.content, "utf8");
+        } catch {
+          // Ignore transient write errors
+        }
+      }
+
       // Fan out all other messages (diff streams, task events, lane shadow syncs, etc.)
       this.broadcast(envelope, node_id);
     } catch {

@@ -161,6 +161,9 @@ export class JoinRunner {
       lane,
       onDiffStream: (diff) => {
         this.client?.streamDiff(diff);
+        if (diff.diff_hunk && diff.active_file) {
+          this.client?.syncLaneShadow(lane, diff.active_file, diff.diff_hunk, Date.now());
+        }
       },
       onFocusChange: (filePath, action) => {
         this.client?.notifyFocusChange(filePath, action);

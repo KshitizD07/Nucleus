@@ -1,0 +1,54 @@
+================================================================================
+SESSION LOG: REAL-TIME SHADOW SYNC AND PERSISTENCE PIPELINE
+================================================================================
+Date       : 2026-11-24
+Domain     : daemon
+Feature    : live_diff_streaming_and_shadows
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Resolve empty `.nucleus/shadows/` directory issue by connecting `WorkspaceDiffWatcher`
+     to real-time `syncLaneShadow` dispatches and persisting incoming shadows to coordinator disk.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - In `packages/cli/src/commands/join.ts`:
+     - Updated `onDiffStream` inside `JoinRunner`'s `WorkspaceDiffWatcher` to call
+       `this.client?.syncLaneShadow(lane, diff.active_file, diff.diff_hunk, Date.now())`.
+     - Whenever a local file is modified, its content hunk is streamed via `sharing:lane_shadow_sync`.
+   - In `packages/coordinator/src/server/coordinator-server.ts`:
+     - Added persistence handler for `sharing:lane_shadow_sync` envelope.
+     - Automatically writes incoming shadow content into `.nucleus/shadows/<source_lane>/<file_path>`
+       in the coordinator workspace root.
+     - Broadcasts envelope to all connected peer nodes so their `ShadowMirror` writes to their local
+       disk under `.nucleus/shadows/<source_lane>/<file_path>`.
+
+3. WHY BEHIND THE CHANGE
+   - Previously, `WorkspaceDiffWatcher` only triggered `streamDiff` (which sent `sharing:live_diff_stream`),
+     but never called `syncLaneShadow` (which sends `sharing:lane_shadow_sync`).
+   - Consequently, `.nucleus/shadows/` remained empty unless manually seeded by integration tests.
+   - Now, as opponents draft arguments in real time, counterpart nodes immediately see the uncommitted
+     argument file materialize in `.nucleus/shadows/<opposing-lane>/`.
+
+4. WHY NOT THE ALTERNATIVE(S)
+   - Alternative 1 (Git commit and pull on every keystroke): Rejected because it creates Git log pollution,
+     merge conflicts, and breaks the pure pull model without uncommitted draft visibility.
+   - Alternative 2 (Polling peer workspaces over network): Rejected because it introduces unbounded latency
+     and requires network file sharing credentials.
+
+5. FILES MODIFIED / CREATED
+   - [CREATE] logs/daemon/live_diff_streaming_and_shadows/real_time_shadow_sync_and_persistence_2026-11-24.txt
+   - [MODIFY] packages/cli/src/commands/join.ts
+   - [MODIFY] packages/coordinator/src/server/coordinator-server.ts
+
+6. PROTOCOL / API / EVENT CHANGES
+   - `sharing:lane_shadow_sync` is now automatically dispatched on every `WorkspaceDiffWatcher` change
+     and persisted on the coordinator and peer nodes.
+
+7. TESTING & VERIFICATION
+   - Built all packages in topological order.
+   - Full Vitest suite (76 tests across 19 suites) passed.
+
+8. NEXT STEPS / OPEN ITEMS
+   - Ready for testing in live debate session.
+================================================================================
