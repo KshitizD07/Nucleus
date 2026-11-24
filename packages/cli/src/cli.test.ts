@@ -19,10 +19,11 @@ describe("Milestone 5: Developer CLI & Room Runner Integration", () => {
   });
 
   it("CLI ARG PARSING: correctly parses commands and options", () => {
-    const initArgs = parseCli(["init", "--port", "9999", "--room", "alpha-room"]);
+    const initArgs = parseCli(["init", "--port", "9999", "--room", "alpha-room", "--tunnel"]);
     expect(initArgs.command).toBe("init");
     expect(initArgs.port).toBe(9999);
     expect(initArgs.roomId).toBe("alpha-room");
+    expect(initArgs.tunnel).toBe(true);
 
     const joinArgs = parseCli(["join", "-u", "ws://localhost:9999", "-t", "tok123", "-l", "backend", "-n", "Aryan"]);
     expect(joinArgs.command).toBe("join");
@@ -113,5 +114,25 @@ describe("Milestone 5: Developer CLI & Room Runner Integration", () => {
     joiner.stop();
     host.stop();
     await new Promise((r) => setTimeout(r, 100));
+  });
+
+  it("ZERO-CONFIG TUNNELING: TunnelManager and InitRunner with --tunnel", async () => {
+    const host = new InitRunner({
+      port: 9879,
+      roomId: "tunnel-test-room",
+      workspaceRoot: hostWs,
+      tunnel: true,
+      tunnelUrl: "wss://alpha-custom.trycloudflare.com"
+    });
+
+    const tunnelUrl = await host.startTunnel();
+    expect(tunnelUrl).toBe("wss://alpha-custom.trycloudflare.com");
+
+    const { inviteCommand } = host.start();
+    const invite = inviteCommand("frontend", tunnelUrl!);
+    expect(invite).toContain("wss://alpha-custom.trycloudflare.com");
+    expect(invite).toContain("--lane frontend");
+
+    host.stop();
   });
 });

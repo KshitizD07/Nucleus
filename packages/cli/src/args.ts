@@ -10,6 +10,7 @@ export interface ParsedCliArgs {
   token?: string;
   lane?: string;
   workspace?: string;
+  tunnel?: boolean;
   help?: boolean;
 }
 
@@ -22,6 +23,7 @@ export function parseCli(args: string[]): ParsedCliArgs {
     lane: { type: "string" as const, short: "l" },
     name: { type: "string" as const, short: "n" },
     workspace: { type: "string" as const, short: "w" },
+    tunnel: { type: "boolean" as const },
     help: { type: "boolean" as const, short: "h" }
   };
 
@@ -53,6 +55,7 @@ export function parseCli(args: string[]): ParsedCliArgs {
       token: values.token,
       lane: values.lane,
       workspace: values.workspace,
+      tunnel: values.tunnel,
       help: values.help
     };
   } catch (err: any) {
@@ -87,6 +90,7 @@ Options:
   -l, --lane <string>       Assigned development lane (e.g. backend, frontend, qa)
   -n, --name <string>       Your name / handle in the room
   -w, --workspace <path>    Project root path (default: current working directory)
+      --tunnel              Start zero-config Cloudflare/ngrok tunnel for public internet invites
   -h, --help                Show this help message
 `);
 }

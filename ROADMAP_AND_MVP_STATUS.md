@@ -42,14 +42,12 @@ These are the final polish tasks to complete the core MVP experience:
   - Added watcher resumption in `WorkspaceDiffWatcher.resume()` and `JoinRunner.onReconnect`.
   - Verified with automated test in `daemon-reconnect.test.ts`.
 
-### 2. Built-in Zero-Config Tunneling Fallback (`nucleus init --tunnel`)
+### 2. Built-in Zero-Config Tunneling Fallback (`nucleus init --tunnel`) [COMPLETED]
 - **Issue:** Manual IP lookups and router subnet mismatches cause connection confusion.
-- **Target Implementation:**
-  - Add native support for Cloudflare Tunnels (`cloudflared`) or authenticated ngrok via an optional flag:
-    ```powershell
-    nucleus init --port 9876 --tunnel
-    ```
-  - Output an internet-routable invite command (`wss://<subdomain>.trycloudflare.com`) alongside the local Wi-Fi invite.
+- **Implementation Status:**
+  - Added native `TunnelManager` in `packages/cli/src/tunnel/` supporting `cloudflared` and `ngrok` fallback.
+  - Added `--tunnel` flag to `nucleus init` CLI to output public `wss://` invite commands.
+  - Verified process management and invite formatting in `packages/cli/src/cli.test.ts`.
 
 ### 3. Hardened Watcher Ignore Filter
 - **Issue:** Unintentional disk noise from dependencies or build tools.

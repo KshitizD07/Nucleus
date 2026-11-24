@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { CoordinatorServer } from "@nucleus/coordinator";
+import { TunnelManager } from "../tunnel/tunnel-manager.js";
 
 export function getLocalIp(): string {
   const interfaces = os.networkInterfaces();
@@ -19,18 +20,27 @@ export interface InitRunnerOptions {
   port?: number;
   roomId?: string;
   workspaceRoot?: string;
+  tunnel?: boolean;
+  tunnelUrl?: string;
 }
 
 export class InitRunner {
   private coordinator: CoordinatorServer | null = null;
+  private tunnelManager: TunnelManager | null = null;
+  private tunnelUrl: string | null = null;
   private readonly port: number;
   private readonly roomId: string;
   private readonly workspaceRoot: string;
+  private readonly options: InitRunnerOptions;
 
   constructor(options: InitRunnerOptions = {}) {
+    this.options = options;
     this.workspaceRoot = path.resolve(options.workspaceRoot || process.cwd());
     this.port = options.port || 9876;
     this.roomId = options.roomId || path.basename(this.workspaceRoot);
+    if (options.tunnelUrl) {
+      this.tunnelUrl = options.tunnelUrl;
+    }
   }
 
   public start(): {
@@ -38,6 +48,7 @@ export class InitRunner {
     inviteCommand: (lane: string, hostUrl?: string) => string;
     tunnelGuidance: string;
     localIp: string;
+    tunnelUrl?: string;
   } {
     const nucleusDir = path.join(this.workspaceRoot, ".nucleus");
     const contractDir = path.join(this.workspaceRoot, "CONTRACT");
@@ -117,11 +128,28 @@ export class InitRunner {
       coordinator: this.coordinator,
       inviteCommand,
       tunnelGuidance,
-      localIp
+      localIp,
+      tunnelUrl: this.tunnelUrl ?? undefined
     };
   }
 
+  public async startTunnel(): Promise<string | null> {
+    if (!this.tunnelManager) {
+      this.tunnelManager = new TunnelManager();
+    }
+    const result = await this.tunnelManager.start(this.port, this.options.tunnelUrl);
+    if (result) {
+      this.tunnelUrl = result.url;
+      return result.url;
+    }
+    return null;
+  }
+
   public stop(): void {
+    if (this.tunnelManager) {
+      this.tunnelManager.stop();
+      this.tunnelManager = null;
+    }
     if (this.coordinator) {
       this.coordinator.stop();
       this.coordinator = null;

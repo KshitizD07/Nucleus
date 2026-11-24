@@ -23,7 +23,8 @@ if (cli.command === "tasks") {
   const runner = new InitRunner({
     port: cli.port,
     roomId: cli.roomId,
-    workspaceRoot: cli.workspace
+    workspaceRoot: cli.workspace,
+    tunnel: cli.tunnel
   });
 
   const { inviteCommand, tunnelGuidance, localIp } = runner.start();
@@ -40,7 +41,19 @@ if (cli.command === "tasks") {
   console.log(`    Frontend :  ${inviteCommand("frontend", `ws://localhost:${cli.port || 9876}`)}`);
   console.log(`    Backend  :  ${inviteCommand("backend", `ws://localhost:${cli.port || 9876}`)}\n`);
 
-  if (tunnelGuidance) {
+  if (cli.tunnel) {
+    console.log("🚇 Initializing zero-config public tunnel...");
+    runner.startTunnel().then((tunnelUrl) => {
+      if (tunnelUrl) {
+        console.log(`  🌍 Public Internet Tunnel (${tunnelUrl}):`);
+        console.log(`    Frontend :  ${inviteCommand("frontend", tunnelUrl)}`);
+        console.log(`    Backend  :  ${inviteCommand("backend", tunnelUrl)}`);
+        console.log(`    QA / DB  :  ${inviteCommand("qa", tunnelUrl)}\n`);
+      } else {
+        console.log(`⚠️ Tunnel could not be established. Ensure cloudflared or ngrok is installed in your PATH.\n`);
+      }
+    });
+  } else if (tunnelGuidance) {
     console.log(tunnelGuidance + "\n");
   }
   console.log("Press Ctrl+C to close room.\n");
