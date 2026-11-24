@@ -3,6 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import { CoordinatorServer } from "@nucleus/coordinator";
 import { TunnelManager } from "../tunnel/tunnel-manager.js";
+import { getPreset, type RoomPreset } from "../presets/index.js";
 
 export function getLocalIp(): string {
   const interfaces = os.networkInterfaces();
@@ -22,6 +23,8 @@ export interface InitRunnerOptions {
   workspaceRoot?: string;
   tunnel?: boolean;
   tunnelUrl?: string;
+  preset?: string;
+  topic?: string;
 }
 
 export class InitRunner {
@@ -49,6 +52,7 @@ export class InitRunner {
     tunnelGuidance: string;
     localIp: string;
     tunnelUrl?: string;
+    preset: RoomPreset;
   } {
     const nucleusDir = path.join(this.workspaceRoot, ".nucleus");
     const contractDir = path.join(this.workspaceRoot, "CONTRACT");
@@ -58,38 +62,33 @@ export class InitRunner {
     fs.mkdirSync(contractDir, { recursive: true });
     fs.mkdirSync(logsDir, { recursive: true });
 
-    // Ensure sample contract template exists if CONTRACT is empty
-    const apiContract = path.join(contractDir, "api.md");
-    if (!fs.existsSync(apiContract)) {
-      fs.writeFileSync(
-        apiContract,
-        "# Project Living Contract: API Specifications\n\nFrozen endpoints and envelopes.\n",
-        "utf8"
-      );
+    const preset = getPreset(this.options.preset);
+
+    // Initialize preset living contracts in CONTRACT/
+    for (const contract of preset.contracts) {
+      const contractPath = path.join(contractDir, contract.relativePath);
+      if (!fs.existsSync(contractPath)) {
+        let content = contract.initialContent;
+        if (this.options.topic && content.includes("(Topic under investigation)")) {
+          content = content.replace("(Topic under investigation)", this.options.topic);
+        }
+        fs.writeFileSync(contractPath, content, "utf8");
+      }
     }
 
-    // Ensure sample tasks backlog exists if .nucleus/tasks.json is empty
+    // Initialize custom agent collaboration rules in CONTRACT/peers.template.md if provided
+    if (preset.peersTemplate) {
+      const templatePath = path.join(contractDir, "peers.template.md");
+      if (!fs.existsSync(templatePath)) {
+        fs.writeFileSync(templatePath, preset.peersTemplate.trim(), "utf8");
+      }
+    }
+
+    // Ensure tasks backlog exists if .nucleus/tasks.json is empty
     const tasksFile = path.join(nucleusDir, "tasks.json");
     if (!fs.existsSync(tasksFile)) {
-      const sampleTasks = [
-        {
-          id: "task-backend-01",
-          title: "Implement core backend API endpoints",
-          lane: "backend",
-          status: "unassigned",
-          assigned_to: null,
-          depends_on_contracts: ["CONTRACT/api.md"]
-        },
-        {
-          id: "task-frontend-01",
-          title: "Build frontend client components",
-          lane: "frontend",
-          status: "unassigned",
-          assigned_to: null,
-          depends_on_contracts: ["CONTRACT/api.md"]
-        }
-      ];
-      fs.writeFileSync(tasksFile, JSON.stringify(sampleTasks, null, 2), "utf8");
+      const tasks = preset.initialTasks(this.options.topic);
+      fs.writeFileSync(tasksFile, JSON.stringify(tasks, null, 2), "utf8");
     }
 
     this.coordinator = new CoordinatorServer({
@@ -103,9 +102,13 @@ export class InitRunner {
     this.coordinator.start();
 
     console.log(`\n======================================================`);
-    console.log(`⚛️  NUCLEUS ROOM HOSTED: [${this.roomId}]`);
+    console.log(`${preset.bannerTitle}: [${this.roomId}]`);
+    if (this.options.topic) {
+      console.log(`Topic: "${this.options.topic}"`);
+    }
     console.log(`Listening on ws://localhost:${this.port}`);
     console.log(`Bound to workspace: ${this.workspaceRoot}`);
+    console.log(`Preset: ${preset.name}`);
     console.log(`======================================================\n`);
 
     const localIp = getLocalIp();
@@ -129,7 +132,8 @@ export class InitRunner {
       inviteCommand,
       tunnelGuidance,
       localIp,
-      tunnelUrl: this.tunnelUrl ?? undefined
+      tunnelUrl: this.tunnelUrl ?? undefined,
+      preset
     };
   }
 

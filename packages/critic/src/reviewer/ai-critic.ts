@@ -40,6 +40,24 @@ export class StaticRuleCriticProvider implements LLMCriticProvider {
       });
     }
 
+    // 3. Dialectic Brevity & Conciseness Guard (Pro / Contra lanes)
+    if (context.lane === "pro" || context.lane === "contra") {
+      const addedText = context.diff
+        .split("\n")
+        .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
+        .map((line) => line.slice(1).trim())
+        .join(" ");
+      const words = addedText.split(/\s+/).filter(Boolean);
+      if (words.length > 200) {
+        findings.push({
+          severity: "critical",
+          file: "(dialectic-round)",
+          message: `Dialectic brevity violation: Argument contains ${words.length} words (maximum allowed is 200 words).`,
+          suggested_fix: "Deconstruct your argument into atomic premises. Keep this turn concise (under 200 words) so your counterpart can address a single focused claim."
+        });
+      }
+    }
+
     return findings;
   }
 }

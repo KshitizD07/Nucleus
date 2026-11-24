@@ -13,6 +13,8 @@ export interface ParsedCliArgs {
   tunnel?: boolean;
   clean?: boolean;
   archived?: boolean;
+  preset?: string;
+  topic?: string;
   help?: boolean;
 }
 
@@ -28,6 +30,8 @@ export function parseCli(args: string[]): ParsedCliArgs {
     tunnel: { type: "boolean" as const },
     clean: { type: "boolean" as const, short: "c" },
     archived: { type: "boolean" as const, short: "a" },
+    preset: { type: "string" as const, short: "P" },
+    topic: { type: "string" as const },
     help: { type: "boolean" as const, short: "h" }
   };
 
@@ -62,6 +66,8 @@ export function parseCli(args: string[]): ParsedCliArgs {
       tunnel: values.tunnel,
       clean: values.clean,
       archived: values.archived,
+      preset: values.preset,
+      topic: values.topic,
       help: values.help
     };
   } catch (err: any) {
@@ -98,6 +104,8 @@ Options:
   -n, --name <string>       Your name / handle in the room
   -w, --workspace <path>    Project root path (default: current working directory)
       --tunnel              Start zero-config Cloudflare/ngrok tunnel for public internet invites
+  -P, --preset <name>       Room preset: engineering (default), dialectic, brainstorm
+      --topic <string>      Resolution topic for debate/brainstorm room
   -c, --clean               Archive completed/approved tasks into .nucleus/tasks_archive.json
   -a, --archived            View completed/archived tasks from .nucleus/tasks_archive.json
   -h, --help                Show this help message

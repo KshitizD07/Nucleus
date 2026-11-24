@@ -158,4 +158,99 @@ describe("Milestone 5: Developer CLI & Room Runner Integration", () => {
 
     host.stop();
   });
+
+  it("DIALECTIC PRESET: initializes topic.md, axioms.md, and turns with turn-taking blocking", async () => {
+    const dialecticWs = `${BASE_TEST_DIR}/dialectic_workspace`;
+    fs.mkdirSync(dialecticWs, { recursive: true });
+
+    const host = new InitRunner({
+      port: 9029,
+      roomId: "dialectic-room",
+      workspaceRoot: dialecticWs,
+      preset: "dialectic",
+      topic: "Is human consciousness algorithmic?"
+    });
+
+    const { inviteCommand, preset } = host.start();
+    expect(preset.id).toBe("dialectic");
+    expect(preset.bannerTitle).toContain("DIALECTIC");
+
+    // Verify CONTRACT files initialized
+    expect(fs.existsSync(`${dialecticWs}/CONTRACT/topic.md`)).toBe(true);
+    expect(fs.existsSync(`${dialecticWs}/CONTRACT/axioms.md`)).toBe(true);
+    expect(fs.existsSync(`${dialecticWs}/CONTRACT/peers.template.md`)).toBe(true);
+
+    const topicContent = fs.readFileSync(`${dialecticWs}/CONTRACT/topic.md`, "utf8");
+    expect(topicContent).toContain("Is human consciousness algorithmic?");
+    expect(topicContent).toContain("**Strict Conciseness:** Maximum 150-200 words");
+
+    // Verify tasks generated with turn-taking blocking
+    const tasksRaw = fs.readFileSync(`${dialecticWs}/.nucleus/tasks.json`, "utf8");
+    const tasks = JSON.parse(tasksRaw);
+    expect(tasks.length).toBe(5);
+
+    const round1Pro = tasks.find((t: any) => t.id === "round-01-pro");
+    const round1Contra = tasks.find((t: any) => t.id === "round-01-contra");
+    expect(round1Pro.status).toBe("unassigned");
+    expect(round1Contra.status).toBe("blocked");
+
+    // Contra cannot claim round 1 contra while blocked
+    const contraClaimBlocked = claimTaskLocally(dialecticWs, "round-01-contra", "ContraAgent", "contra");
+    expect(contraClaimBlocked).toBe(false);
+
+    // Pro claims and completes round 1
+    const proClaimOk = claimTaskLocally(dialecticWs, "round-01-pro", "ProAgent", "pro");
+    expect(proClaimOk).toBe(true);
+
+    // Coordinator unblocks dependent tasks when round 1 is approved
+    const server = host["coordinator"];
+    expect(server).toBeDefined();
+    server!.getTaskBoard().updateStatus("round-01-pro", "approved");
+
+    const updatedContra = server!.getTaskBoard().getTask("round-01-contra");
+    expect(updatedContra?.status).toBe("unassigned");
+
+    // Now Contra can claim!
+    // Write back to disk to simulate sync
+    fs.writeFileSync(`${dialecticWs}/.nucleus/tasks.json`, JSON.stringify(server!.getTaskBoard().getAll(), null, 2), "utf8");
+    const contraClaimOk = claimTaskLocally(dialecticWs, "round-01-contra", "ContraAgent", "contra");
+    expect(contraClaimOk).toBe(true);
+
+    const invitePro = inviteCommand("pro");
+    expect(invitePro).toContain("--lane pro");
+    const inviteContra = inviteCommand("contra");
+    expect(inviteContra).toContain("--lane contra");
+
+    host.stop();
+  });
+
+  it("BRAINSTORM PRESET: initializes PRD.md, decisions.md, and 4 functional roles", async () => {
+    const brainstormWs = `${BASE_TEST_DIR}/brainstorm_workspace`;
+    fs.mkdirSync(brainstormWs, { recursive: true });
+
+    const host = new InitRunner({
+      port: 9031,
+      roomId: "brainstorm-room",
+      workspaceRoot: brainstormWs,
+      preset: "brainstorm",
+      topic: "Autonomous AI Dev Environments"
+    });
+
+    const { preset } = host.start();
+    expect(preset.id).toBe("brainstorm");
+
+    expect(fs.existsSync(`${brainstormWs}/CONTRACT/PRD.md`)).toBe(true);
+    expect(fs.existsSync(`${brainstormWs}/CONTRACT/decisions.md`)).toBe(true);
+
+    const tasksRaw = fs.readFileSync(`${brainstormWs}/.nucleus/tasks.json`, "utf8");
+    const tasks = JSON.parse(tasksRaw);
+    expect(tasks.length).toBe(4);
+    const lanes = tasks.map((t: any) => t.lane);
+    expect(lanes).toContain("vision");
+    expect(lanes).toContain("skeptic");
+    expect(lanes).toContain("market");
+    expect(lanes).toContain("systems");
+
+    host.stop();
+  });
 });

@@ -45,31 +45,50 @@ if (cli.command === "tasks") {
     port: cli.port,
     roomId: cli.roomId,
     workspaceRoot: cli.workspace,
-    tunnel: cli.tunnel
+    tunnel: cli.tunnel,
+    preset: cli.preset,
+    topic: cli.topic
   });
 
-  const { inviteCommand, tunnelGuidance, localIp } = runner.start();
+  const { inviteCommand, tunnelGuidance, localIp, preset } = runner.start();
 
   console.log("Sample invite commands for teammates:\n");
   if (localIp && localIp !== "localhost") {
     console.log(`  📡 Friend on Same Wi-Fi / Local Network (${localIp}):`);
-    console.log(`    Frontend :  ${inviteCommand("frontend")}`);
-    console.log(`    Backend  :  ${inviteCommand("backend")}`);
-    console.log(`    QA / DB  :  ${inviteCommand("qa")}\n`);
+    if (preset.sampleInviteGuidance) {
+      for (const line of preset.sampleInviteGuidance(inviteCommand)) {
+        console.log(line);
+      }
+    } else {
+      for (const lane of preset.defaultLanes) {
+        console.log(`    ${lane.padEnd(9)}:  ${inviteCommand(lane)}`);
+      }
+    }
+    console.log("");
   }
 
   console.log(`  💻 Same Machine (Localhost):`);
-  console.log(`    Frontend :  ${inviteCommand("frontend", `ws://localhost:${cli.port || 9876}`)}`);
-  console.log(`    Backend  :  ${inviteCommand("backend", `ws://localhost:${cli.port || 9876}`)}\n`);
+  const localUrl = `ws://localhost:${cli.port || 9876}`;
+  if (preset.sampleInviteGuidance) {
+    for (const line of preset.sampleInviteGuidance(inviteCommand, localUrl)) {
+      console.log(line);
+    }
+  } else {
+    for (const lane of preset.defaultLanes) {
+      console.log(`    ${lane.padEnd(9)}:  ${inviteCommand(lane, localUrl)}`);
+    }
+  }
+  console.log("");
 
   if (cli.tunnel) {
     console.log("🚇 Initializing zero-config public tunnel...");
     runner.startTunnel().then((tunnelUrl) => {
       if (tunnelUrl) {
         console.log(`  🌍 Public Internet Tunnel (${tunnelUrl}):`);
-        console.log(`    Frontend :  ${inviteCommand("frontend", tunnelUrl)}`);
-        console.log(`    Backend  :  ${inviteCommand("backend", tunnelUrl)}`);
-        console.log(`    QA / DB  :  ${inviteCommand("qa", tunnelUrl)}\n`);
+        for (const lane of preset.defaultLanes) {
+          console.log(`    ${lane.padEnd(9)}:  ${inviteCommand(lane, tunnelUrl)}`);
+        }
+        console.log("");
       } else {
         console.log(`⚠️ Tunnel could not be established. Ensure cloudflared or ngrok is installed in your PATH.\n`);
       }

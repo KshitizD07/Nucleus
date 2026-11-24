@@ -32,6 +32,12 @@ export class TaskBoardManager {
         reason: `Forbidden: Lane mismatch. Node '${nodeId}' in lane '${lane}' cannot claim task '${taskId}' belonging to lane '${task.lane}'`
       };
     }
+    if (task.status === "blocked") {
+      return {
+        success: false,
+        reason: `Task ${taskId} is currently blocked pending completion of preceding turns/tasks.`
+      };
+    }
     const assignee = displayName || nodeId;
     if (task.assigned_to && task.assigned_to !== assignee && task.assigned_to !== nodeId) {
       return { success: false, reason: `Task ${taskId} is already claimed by ${task.assigned_to}` };
@@ -56,6 +62,22 @@ export class TaskBoardManager {
       task.assigned_to = null;
     }
     if (branch) task.branch = branch;
+
+    // When a task is approved, auto-unblock any dependent tasks whose requirements are met
+    if (status === "approved") {
+      for (const other of this.tasks.values()) {
+        if (other.status === "blocked" && other.depends_on_contracts && other.depends_on_contracts.length > 0) {
+          const allDepsMet = other.depends_on_contracts.every((dep) => {
+            if (dep.startsWith("CONTRACT/")) return true;
+            const depTask = this.tasks.get(dep);
+            return !depTask || depTask.status === "approved";
+          });
+          if (allDepsMet) {
+            other.status = "unassigned";
+          }
+        }
+      }
+    }
 
     this.persistToDisk();
     return { success: true, task };

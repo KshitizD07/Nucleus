@@ -150,6 +150,11 @@ export function claimTaskLocally(workspaceRoot: string, taskId: string, assigned
       return false;
     }
 
+    if (task.status === "blocked") {
+      console.error(`\n⚠️ Task [${taskId}] is currently BLOCKED pending completion of preceding turns/tasks.\n`);
+      return false;
+    }
+
     if (task.assigned_to && task.assigned_to !== assignedTo) {
       console.error(`\n⚠️ Task [${taskId}] was already claimed by ${task.assigned_to}.`);
       const availableSameLane = tasks

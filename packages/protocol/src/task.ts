@@ -6,7 +6,8 @@ export const TaskStatusSchema = z.enum([
   "active",
   "in_review",
   "changes_requested",
-  "approved"
+  "approved",
+  "blocked"
 ]);
 
 export const TaskItemSchema = z.object({

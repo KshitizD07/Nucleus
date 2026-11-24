@@ -2,7 +2,7 @@
 
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/typescript-%5E5.4-blue.svg)](https://www.typescriptlang.org/)
-[![Test Suite](https://img.shields.io/badge/tests-73%2F73%20passing-success.svg)](packages/cli/src/system-audit.test.ts)
+[![Test Suite](https://img.shields.io/badge/tests-76%2F76%20passing-success.svg)](packages/cli/src/system-audit.test.ts)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)](LICENSE)
 [![Architecture](https://img.shields.io/badge/architecture-P2P%20Pure%20Pull%20Model-purple.svg)](docs/multiplayer-room-architecture.md)
 
@@ -142,13 +142,19 @@ npm link
 
 ### 2. Host a Room (Tech Lead / Initiator)
 ```powershell
-# Open room locally on local network / Wi-Fi
+# Open room locally on local network / Wi-Fi (Engineering Monorepo)
 nucleus init --port 9876
 
 # Or host with zero-config public internet tunnel for remote teammates
 nucleus init --tunnel
+
+# Or host an Adversarial Debate / Philosophical Dialectic Room
+nucleus init --preset dialectic --topic "Is consciousness fundamentally algorithmic?"
+
+# Or host a Product Strategy & Architecture Brainstorm Room
+nucleus init --preset brainstorm --topic "Autonomous AI Development"
 ```
-*(The host prints your local Wi-Fi and public tunnel URLs and automatically initializes `.nucleus/tasks.json` and `CONTRACT/api.md`.)*
+*(The host prints your local Wi-Fi and public tunnel URLs and automatically initializes `.nucleus/tasks.json` and `CONTRACT/` according to the preset.)*
 
 ### 3. Invite Team Members
 In another terminal, issue single-use tokens for assigned lanes:
@@ -175,7 +181,7 @@ Once connected, run your local AI agent (Claude Code, Antigravity, Aider) in the
 
 | Command | Options | Description |
 | :--- | :--- | :--- |
-| `nucleus init` | `-p, --port <port>`<br/>`-r, --room <name>`<br/>`--tunnel` | Open and host a multiplayer room (with optional public internet tunnel) |
+| `nucleus init` | `-p, --port <port>`<br/>`-r, --room <name>`<br/>`--tunnel`<br/>`-P, --preset <name>`<br/>`--topic <string>` | Open and host a multiplayer room (presets: `engineering`, `dialectic`, `brainstorm`) |
 | `nucleus join` | `-u, --url <url>`<br/>`-t, --token <token>`<br/>`-l, --lane <lane>`<br/>`-n, --name <name>` | Connect local workspace to an active room |
 | `nucleus invite` | `-l, --lane <lane>` | Generate a secure single-use join token |
 | `nucleus tasks` | `-c, --clean`<br/>`-a, --archived`<br/>`-l, --lane <lane>` | View task board, archive approved tasks (`--clean`), or view past work (`--archived`) |
@@ -213,7 +219,7 @@ nucleus/
 ## 🧪 Engineering Protocols & Verification
 
 Nucleus is built under strict distributed systems standards:
-- **Comprehensive Test Suite:** 19 test suites and **73 tests passing** (Vitest).
+- **Comprehensive Test Suite:** 19 test suites and **76 tests passing** (Vitest).
 - **Stress & Throughput Benchmarks:** Validated under 200 diff bursts at >1,100 messages/sec with sub-7ms broadcast latency.
 - **Jailbreak Defense:** 100% path-traversal prevention (`../` and symlink escapes blocked).
 - **Concurrency Safety:** Multi-node mutex tests verify 1 lease winner, 0 race conditions, and automatic lease recovery on disconnect.

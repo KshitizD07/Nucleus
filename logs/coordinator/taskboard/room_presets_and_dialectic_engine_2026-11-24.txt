@@ -1,0 +1,93 @@
+================================================================================
+NUCLEUS SESSION LOG: ROOM PRESETS AND ADVERSARIAL DIALECTIC ENGINE
+================================================================================
+Date: 2026-11-24
+Domain: coordinator
+Feature: taskboard
+Task Name: room_presets_and_dialectic_engine
+
+--------------------------------------------------------------------------------
+1. TASK OVERVIEW
+--------------------------------------------------------------------------------
+Expanded Nucleus beyond 3-tier software engineering into complex research,
+philosophical debate, and product strategy without disrupting existing
+monorepo engineering workflows. Users can now run:
+- nucleus init (default: engineering monorepo)
+- nucleus init --preset dialectic --topic "Is consciousness algorithmic?"
+- nucleus init --preset brainstorm --topic "Autonomous Dev Environments"
+
+Enforces three strict dialectic rules:
+1. Strict turn-taking: Neither side (Pro / Contra) may claim or reply until
+   the opponent's preceding round is approved and completed.
+2. Atomic conciseness: Hard 200-word limit per turn enforced by Critique Gate,
+   preventing rambling essays and forcing step-by-step deconstruction.
+3. Live visibility: Center / user observes both sides composing arguments in
+   real-time via .nucleus/shadows/<lane>/ before rounds are even completed.
+
+--------------------------------------------------------------------------------
+2. ARCHITECTURAL & PROTOCOL DECISIONS
+--------------------------------------------------------------------------------
+- Added "blocked" status to TaskStatusSchema in @nucleus/protocol.
+- Automated dependency unblocking in TaskBoardManager.updateStatus():
+  When round-01-pro transitions to "approved", round-01-contra automatically
+  unblocks from "blocked" to "unassigned".
+- Preset configuration architecture under packages/cli/src/presets/:
+  - engineering: default, 100% backward compatible (frontend, backend, CONTRACT/api.md)
+  - dialectic: pro, contra, judge; CONTRACT/topic.md, axioms.md, speaking_floor.md;
+    5 atomic rounds with strict turn-taking dependencies
+  - brainstorm: vision, skeptic, market, systems; CONTRACT/PRD.md, decisions.md
+- Critique Gate Brevity Guard in StaticRuleCriticProvider:
+  Counts words on added lines for pro/contra lanes. Flags critical finding
+  if argument exceeds 200 words, returning action guidance to deconstruct.
+
+--------------------------------------------------------------------------------
+3. WHY BEHIND THE CHANGE
+--------------------------------------------------------------------------------
+Single-LLM prompts for debate or strategy suffer from sycophancy, context
+smear, and balance bias. True dialectic progress requires multi-model adversarial
+tension (e.g. Gemini vs. Claude vs. DeepSeek) with strict floor turns and
+concise premise-by-premise deconstruction.
+
+--------------------------------------------------------------------------------
+4. WHY NOT THE ALTERNATIVE(S)
+--------------------------------------------------------------------------------
+- Alternative: Hardcode pro/contra into coordinator server.
+  Rejected: Would contaminate the core software engineering monorepo mission.
+  Presets keep domain logic decoupled as modular profile templates.
+- Alternative: Enforce turns via interactive terminal prompts.
+  Rejected: Violates the Pure Pull Model and breaks autonomous AI agents.
+
+--------------------------------------------------------------------------------
+5. IMPACTED PACKAGES & MODULES
+--------------------------------------------------------------------------------
+- packages/protocol/src/task.ts: Added "blocked" status to TaskStatusSchema.
+- packages/coordinator/src/task/task-board.ts: Added blocked claim check and auto-unblock.
+- packages/critic/src/reviewer/ai-critic.ts: Added dialectic brevity guard (<200 words).
+- packages/cli/src/presets/: Created RoomPreset interface and presets (engineering, dialectic, brainstorm).
+- packages/cli/src/commands/init.ts: Integrated preset loading, contract and task scaffolding.
+- packages/cli/src/commands/tasks.ts: Added blocked status check to claimTaskLocally.
+- packages/cli/src/args.ts & bin/nucleus.js: Added --preset (-P) and --topic flags.
+
+--------------------------------------------------------------------------------
+6. DATA CONTRACTS & WIRE FORMAT
+--------------------------------------------------------------------------------
+- TaskItemSchema: status now permits "blocked".
+- Contracts generated:
+  - CONTRACT/topic.md
+  - CONTRACT/axioms.md
+  - CONTRACT/speaking_floor.md
+  - CONTRACT/peers.template.md
+
+--------------------------------------------------------------------------------
+7. SECURITY & TOS COMPLIANCE
+--------------------------------------------------------------------------------
+- Pure Pull Model intact: Filesystem-mediated coordination only.
+- Strict workspace jail preserved.
+- No credential transport across network.
+
+--------------------------------------------------------------------------------
+8. VERIFICATION & VALIDATION
+--------------------------------------------------------------------------------
+- 19 test suites, 76/76 tests passing (100% pass rate).
+- Validated dialectic initialization, turn unblocking, and brevity rejection.
+================================================================================

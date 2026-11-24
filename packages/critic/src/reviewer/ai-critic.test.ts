@@ -68,4 +68,34 @@ describe("AICriticPipeline (Two-Stage Gate Evaluation)", () => {
     expect(markdown).toContain("Missing rate-limiter");
     expect(markdown).toContain("express-rate-limit");
   });
+
+  it("DIALECTIC BREVITY GUARD: rejects arguments exceeding 200 words in pro/contra lane", async () => {
+    const pipeline = new AICriticPipeline();
+
+    // Generate a rambling 250-word argument
+    const longArgument = Array(250).fill("premise").join(" ");
+    const { result, markdown } = await pipeline.evaluate({
+      taskId: "round-01-pro",
+      lane: "pro",
+      spec: "Opening Thesis",
+      diff: `+ ${longArgument}`,
+      deterministicChecksPassed: true
+    });
+
+    expect(result.verdict).toBe("changes_requested");
+    expect(markdown).toContain("Dialectic brevity violation");
+    expect(markdown).toContain("maximum allowed is 200 words");
+
+    // Concise argument under 200 words passes
+    const conciseArgument = "+ Premise: Functional computation requires memory. Argument: State changes necessitate bounded side-effects. Conclusion: Pure functions alone cannot model stateful agents.";
+    const passed = await pipeline.evaluate({
+      taskId: "round-01-pro",
+      lane: "pro",
+      spec: "Opening Thesis",
+      diff: conciseArgument,
+      deterministicChecksPassed: true
+    });
+
+    expect(passed.result.verdict).toBe("approved");
+  });
 });
