@@ -1,0 +1,50 @@
+================================================================================
+SESSION LOG: HARDENED WATCHER IGNORE AND BINARY FILTER
+================================================================================
+Date       : 2026-11-24
+Domain     : daemon
+Feature    : watcher
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Implement non-bypassable global directory ignore filters in `WorkspaceDiffWatcher`.
+   - Prevent background file watcher noise and memory spikes caused by dependency folders (`node_modules`), build output (`dist`, `build`, `.next`), and internal directories (`.nucleus/shadows`).
+   - Filter non-code binary files (`.png`, `.exe`, `.zip`, `.wasm`, etc.) and buffers with null bytes from triggering diff streams.
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - Defined `GLOBAL_NON_BYPASSABLE_IGNORES`:
+     - `node_modules`, `.git`, `dist`, `build`, `.next`, `.nucleus/shadows`, `.cache`, `.turbo`, `coverage`, `out`.
+     - Automatically combined with any custom user patterns in `WorkspaceDiffWatcher` constructor so callers cannot bypass them.
+   - Defined `BINARY_EXTENSIONS` set covering images, archives, compiled binaries, fonts, audio/video, and bytecode.
+   - Added early return in `fs.watch` callback if a path matches ignored patterns or binary extension, avoiding unnecessary debounce timers or focus change events.
+   - Added `isBinaryContent(buffer)` checking the first 1024 bytes for null characters (standard git heuristic) to prevent binary payloads from streaming.
+   - Created comprehensive unit test suite in `packages/daemon/src/watcher/diff-watcher.test.ts`.
+
+3. WHY BEHIND THE CHANGE
+   - Active package manager installations (`npm install`) or build tools (`next build`, `tsc`, `webpack`) generate thousands of rapid file touches. If not strictly ignored, daemons broadcast hundreds of spurious diff events, causing memory bloat and overwhelming peer shadow directories.
+   - Diffing binary files generates garbage diff hunks and corrupts Markdown shadow mirrors.
+
+4. WHY NOT THE ALTERNATIVE(S)
+   - Relying on `.gitignore`: Many projects do not commit `.gitignore` upfront, or have incomplete rules during initial setup. A hardcoded non-bypassable core ignore list guarantees room stability out of the box.
+   - Catching binary only at transport: Triggers unnecessary disk I/O, hash comparisons, and memory allocation before rejection. Early rejection at the watcher boundary is optimal.
+
+5. FILES MODIFIED / CREATED
+   - [CREATE] packages/daemon/src/watcher/diff-watcher.test.ts
+   - [CREATE] logs/daemon/watcher/hardened_watcher_ignore_filter_2026-11-24.txt
+   - [MODIFY] packages/daemon/src/watcher/diff-watcher.ts
+   - [MODIFY] ROADMAP_AND_MVP_STATUS.md
+
+6. PROTOCOL / API / EVENT CHANGES (if applicable)
+   - Exports `GLOBAL_NON_BYPASSABLE_IGNORES` and `BINARY_EXTENSIONS` constants from `@nucleus/daemon`.
+
+7. TESTING & VERIFICATION
+   - Executed `diff-watcher.test.ts`:
+     - Verified global ignores cannot be bypassed with empty `ignoredPatterns: []`.
+     - Verified binary file extensions rejected.
+     - Verified null-byte binary buffers detected and dropped.
+   - 3 tests passed (100%).
+
+8. NEXT STEPS / OPEN ITEMS
+   - Proceed with Item 4: User-Friendly Task Collision Error Handling in CLI.
+================================================================================

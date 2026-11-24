@@ -49,12 +49,12 @@ These are the final polish tasks to complete the core MVP experience:
   - Added `--tunnel` flag to `nucleus init` CLI to output public `wss://` invite commands.
   - Verified process management and invite formatting in `packages/cli/src/cli.test.ts`.
 
-### 3. Hardened Watcher Ignore Filter
+### 3. Hardened Watcher Ignore Filter [COMPLETED]
 - **Issue:** Unintentional disk noise from dependencies or build tools.
-- **Target Implementation:**
-  - Hardcode a global non-bypassable ignore list in `packages/daemon/src/watcher/`:
-    `**/node_modules/**`, `**/.git/**`, `**/dist/**`, `**/build/**`, `**/.next/**`, `**/.nucleus/shadows/**`.
-  - Prevent non-code binary files from triggering diff payloads.
+- **Implementation Status:**
+  - Hardcoded non-bypassable global ignore list (`node_modules`, `.git`, `dist`, `build`, `.next`, `.nucleus/shadows`, `.cache`, `.turbo`) in `packages/daemon/src/watcher/diff-watcher.ts`.
+  - Added binary file extension filter and null-byte buffer inspection (git heuristic) to prevent binary diff streaming.
+  - Verified with automated tests in `packages/daemon/src/watcher/diff-watcher.test.ts`.
 
 ### 4. User-Friendly Task Collision Error Handling in CLI
 - **Issue:** The mutex engine correctly rejects concurrent claims atomically, but the contributor CLI output should provide clear guidance.

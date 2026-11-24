@@ -3,6 +3,28 @@ import path from "node:path";
 import { WorkspaceJail } from "../jail/jail.js";
 import type { LiveDiffStream } from "@nucleus/protocol";
 
+export const GLOBAL_NON_BYPASSABLE_IGNORES: readonly string[] = [
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".next",
+  ".nucleus/shadows",
+  ".cache",
+  ".turbo",
+  "coverage",
+  "out"
+];
+
+export const BINARY_EXTENSIONS: ReadonlySet<string> = new Set([
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".svg",
+  ".pdf", ".zip", ".tar", ".gz", ".7z", ".rar",
+  ".exe", ".dll", ".so", ".dylib", ".bin",
+  ".woff", ".woff2", ".ttf", ".eot", ".otf",
+  ".mp3", ".mp4", ".mov", ".avi", ".wav",
+  ".pyc", ".class", ".wasm", ".db", ".sqlite", ".iso"
+]);
+
 export interface WorkspaceDiffWatcherOptions {
   workspaceRoot: string;
   lane: string;
@@ -28,14 +50,9 @@ export class WorkspaceDiffWatcher {
     this.workspaceRoot = path.resolve(options.workspaceRoot);
     this.jail = new WorkspaceJail(this.workspaceRoot);
     this.lane = options.lane;
-    this.ignoredPatterns = options.ignoredPatterns ?? [
-      "node_modules",
-      ".git",
-      ".nucleus",
-      "dist",
-      "build",
-      ".cache"
-    ];
+    const userPatterns = options.ignoredPatterns ?? [".nucleus"];
+    const combined = new Set([...GLOBAL_NON_BYPASSABLE_IGNORES, ...userPatterns]);
+    this.ignoredPatterns = Array.from(combined);
     this.debounceMs = options.debounceMs ?? 300;
     this.onDiffStream = options.onDiffStream;
     this.onFocusChange = options.onFocusChange;
@@ -48,8 +65,8 @@ export class WorkspaceDiffWatcher {
         if (!relativeFilename) return;
         const normalized = relativeFilename.replace(/\\/g, "/");
 
-        // Ignore excluded folders
-        if (this.isIgnored(normalized)) return;
+        // Ignore excluded folders or binary files early
+        if (this.isIgnored(normalized) || this.isBinaryFile(normalized)) return;
 
         this.onFocusChange(normalized, "editing");
 
@@ -86,18 +103,52 @@ export class WorkspaceDiffWatcher {
     }
   }
 
-  private isIgnored(filePath: string): boolean {
-    return this.ignoredPatterns.some((pattern) => filePath.startsWith(pattern) || filePath.includes(`/${pattern}/`));
+  public isIgnored(filePath: string): boolean {
+    const normalized = filePath.replace(/\\/g, "/").replace(/^\/+/, "");
+    for (const pattern of this.ignoredPatterns) {
+      if (normalized === pattern || normalized.startsWith(pattern + "/")) {
+        return true;
+      }
+      if (normalized.includes("/" + pattern + "/") || normalized.endsWith("/" + pattern)) {
+        return true;
+      }
+      if (pattern.includes("/") && (normalized.includes(pattern) || normalized.startsWith(pattern))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public isBinaryFile(filePath: string): boolean {
+    const ext = path.extname(filePath).toLowerCase();
+    return BINARY_EXTENSIONS.has(ext);
+  }
+
+  public isBinaryContent(buffer: Buffer): boolean {
+    const checkLength = Math.min(buffer.length, 1024);
+    for (let i = 0; i < checkLength; i++) {
+      if (buffer[i] === 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private handleFileChange(relativeFilePath: string): void {
     try {
+      if (this.isIgnored(relativeFilePath) || this.isBinaryFile(relativeFilePath)) return;
+
       const fullPath = this.jail.resolveSafe(relativeFilePath);
       if (!fs.existsSync(fullPath)) return;
       const stat = fs.statSync(fullPath);
       if (!stat.isFile()) return;
 
-      const newContent = fs.readFileSync(fullPath, "utf8");
+      const buffer = fs.readFileSync(fullPath);
+      if (this.isBinaryContent(buffer)) {
+        return; // Skip binary content
+      }
+
+      const newContent = buffer.toString("utf8");
       const oldContent = this.fileSnapshots.get(relativeFilePath) ?? "";
       this.fileSnapshots.set(relativeFilePath, newContent);
 
