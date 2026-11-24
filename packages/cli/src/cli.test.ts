@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { parseCli, InitRunner, JoinRunner, listTasks, claimTaskLocally } from "./index.js";
+import { parseCli, InitRunner, JoinRunner, listTasks, claimTaskLocally, archiveCompletedTasksLocally } from "./index.js";
 import fs from "node:fs";
 
 const TEST_PORT = 9015;
@@ -74,6 +74,25 @@ describe("Milestone 5: Developer CLI & Room Runner Integration", () => {
     // Collision rejection: second contributor claims already claimed task
     const collisionRejected = claimTaskLocally(joinerWs, "task-test-01", "Harsh", "backend");
     expect(collisionRejected).toBe(false);
+
+    // Update task to approved and verify archiving
+    const currentTasks = JSON.parse(fs.readFileSync(`${nucleusDir}/tasks.json`, "utf8"));
+    currentTasks[0].status = "approved";
+    fs.writeFileSync(`${nucleusDir}/tasks.json`, JSON.stringify(currentTasks, null, 2), "utf8");
+
+    const archiveResult = archiveCompletedTasksLocally(joinerWs);
+    expect(archiveResult.archivedCount).toBe(1);
+    expect(archiveResult.remainingCount).toBe(0);
+
+    // Active board is now clean
+    const activeRemaining = JSON.parse(fs.readFileSync(`${nucleusDir}/tasks.json`, "utf8"));
+    expect(activeRemaining.length).toBe(0);
+
+    // Archive file contains the completed task
+    const archiveContent = JSON.parse(fs.readFileSync(`${nucleusDir}/tasks_archive.json`, "utf8"));
+    expect(archiveContent.length).toBe(1);
+    expect(archiveContent[0].id).toBe("task-test-01");
+    expect(archiveContent[0].status).toBe("approved");
   });
 
   it("E2E CLI RUNNER: Host room with InitRunner and connect via JoinRunner", async () => {

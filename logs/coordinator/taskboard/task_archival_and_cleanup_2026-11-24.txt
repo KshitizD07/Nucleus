@@ -1,0 +1,60 @@
+================================================================================
+SESSION LOG: COMPLETED TASK ARCHIVAL AND BOARD CLEANUP (NUCLEUS TASKS --CLEAN)
+================================================================================
+Date       : 2026-11-24
+Domain     : coordinator
+Feature    : taskboard
+Status     : Completed
+--------------------------------------------------------------------------------
+
+1. OBJECTIVE
+   - Implement automatic and on-demand archiving for completed and approved tasks.
+   - Keep `.nucleus/tasks.json` tidy and lean for LLM context windows while preserving permanent historical records in `.nucleus/tasks_archive.json`.
+   - Add CLI support (`nucleus tasks --clean`, `nucleus tasks --archived`).
+
+2. WORK PERFORMED & ARCHITECTURE DETAILS
+   - Updated `TaskBoardManager` in `packages/coordinator/src/task/task-board.ts`:
+     - Added `archivePath` pointing to `tasks_archive.json`.
+     - Added `archiveCompletedTasks()`: identifies tasks with `status === "approved"`, atomically removes them from `this.tasks`, and appends them to `tasks_archive.json`.
+     - Added `getArchivedTasks()`: reads historical tasks from disk.
+   - Updated `TaskBoardReplica` in `packages/daemon/src/task/task-replica.ts`:
+     - Added `archiveFile` resolving safely within `WorkspaceJail` to `.nucleus/tasks_archive.json`.
+     - Added `archiveCompletedTasks()` and `getArchivedTasks()`.
+   - Updated `packages/cli/src/commands/tasks.ts`:
+     - Added `archiveCompletedTasksLocally(workspaceRoot)`: moves approved tasks from `.nucleus/tasks.json` to `.nucleus/tasks_archive.json` and reports clear terminal feedback.
+     - Updated `listTasks()`: supports `showArchived` flag to view historical tasks, and prints helpful guidance on pruning.
+   - Updated `packages/cli/src/args.ts` and `packages/cli/bin/nucleus.js`:
+     - Added `-c, --clean` flag to prune and archive completed tasks.
+     - Added `-a, --archived` flag to inspect completed tasks.
+   - Relocated multi-package `system-audit.test.ts` into `@nucleus/cli` to maintain a clean DAG without circular package imports.
+   - Added automated tests in `packages/cli/src/cli.test.ts` and `packages/cli/src/system-audit.test.ts`.
+
+3. WHY BEHIND THE CHANGE
+   - In long-running development sessions with dozens of completed tasks, accumulating completed tasks in `.nucleus/tasks.json` inflates file sizes, consumes unnecessary context tokens for LLMs, and increases disk synchronization overhead.
+   - Storing completed tasks in `.nucleus/tasks_archive.json` keeps the active board minimal while maintaining a full audit log.
+
+4. WHY NOT THE ALTERNATIVE(S)
+   - Permanently deleting completed tasks: Loses historical context, blame trail, and review notes.
+   - Keeping tasks in one huge file with an "archived" boolean filter: Still forces agents to ingest and parse large JSON files on every task claim. Moving them to a separate file ensures zero token overhead.
+
+5. FILES MODIFIED / CREATED
+   - [CREATE] logs/coordinator/taskboard/task_archival_and_cleanup_2026-11-24.txt
+   - [CREATE] packages/cli/src/system-audit.test.ts
+   - [DELETE] packages/coordinator/src/server/system-audit-suite.test.ts
+   - [MODIFY] packages/coordinator/src/task/task-board.ts
+   - [MODIFY] packages/daemon/src/task/task-replica.ts
+   - [MODIFY] packages/cli/src/commands/tasks.ts
+   - [MODIFY] packages/cli/src/args.ts
+   - [MODIFY] packages/cli/bin/nucleus.js
+   - [MODIFY] packages/cli/src/cli.test.ts
+
+6. PROTOCOL / API / EVENT CHANGES (if applicable)
+   - CLI flags added: `nucleus tasks --clean` and `nucleus tasks --archived`.
+
+7. TESTING & VERIFICATION
+   - Verified local and coordinator task archiving: approved tasks moved to `tasks_archive.json`, active tasks cleanly retained.
+   - All 19 test suites and 73 tests passed across the monorepo (100%).
+
+8. NEXT STEPS / OPEN ITEMS
+   - Ready for active development and real-world dogfooding.
+================================================================================

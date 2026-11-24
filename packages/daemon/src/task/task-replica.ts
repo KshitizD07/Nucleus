@@ -6,12 +6,14 @@ import type { TaskItem } from "@nucleus/protocol";
 export class TaskBoardReplica {
   private readonly jail: WorkspaceJail;
   private readonly tasksFile: string;
+  private readonly archiveFile: string;
   private tasks: Map<string, TaskItem> = new Map();
 
   constructor(workspaceRoot: string) {
     this.jail = new WorkspaceJail(workspaceRoot);
     const nucleusDir = this.jail.resolveSafe(".nucleus");
     this.tasksFile = this.jail.resolveSafe(path.join(".nucleus", "tasks.json"));
+    this.archiveFile = this.jail.resolveSafe(path.join(".nucleus", "tasks_archive.json"));
     fs.mkdirSync(nucleusDir, { recursive: true });
   }
 
@@ -34,6 +36,35 @@ export class TaskBoardReplica {
 
   public getAll(): TaskItem[] {
     return Array.from(this.tasks.values());
+  }
+
+  public getArchivedTasks(): TaskItem[] {
+    if (!fs.existsSync(this.archiveFile)) return [];
+    try {
+      const raw = fs.readFileSync(this.archiveFile, "utf8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {}
+    return [];
+  }
+
+  public archiveCompletedTasks(): TaskItem[] {
+    const toArchive: TaskItem[] = [];
+    for (const [id, task] of this.tasks.entries()) {
+      if (task.status === "approved") {
+        toArchive.push(task);
+        this.tasks.delete(id);
+      }
+    }
+
+    if (toArchive.length > 0) {
+      const existing = this.getArchivedTasks();
+      const combined = [...existing, ...toArchive];
+      fs.writeFileSync(this.archiveFile, JSON.stringify(combined, null, 2), "utf8");
+      this.saveToDisk();
+    }
+
+    return toArchive;
   }
 
   private saveToDisk(): void {

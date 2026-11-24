@@ -1,5 +1,13 @@
 #!/usr/bin/env node
-import { parseCli, printHelp, InitRunner, JoinRunner, listTasks, claimTaskLocally } from "../dist/index.js";
+import {
+  parseCli,
+  printHelp,
+  InitRunner,
+  JoinRunner,
+  listTasks,
+  claimTaskLocally,
+  archiveCompletedTasksLocally
+} from "../dist/index.js";
 
 const cli = parseCli(process.argv.slice(2));
 
@@ -9,7 +17,11 @@ if (cli.command === "help" || cli.help) {
 }
 
 if (cli.command === "tasks") {
-  listTasks(cli.workspace || process.cwd(), cli.lane);
+  if (cli.clean) {
+    archiveCompletedTasksLocally(cli.workspace || process.cwd());
+  } else {
+    listTasks(cli.workspace || process.cwd(), cli.lane, undefined, cli.archived);
+  }
   process.exit(0);
 } else if (cli.command === "claim") {
   if (!cli.taskId) {

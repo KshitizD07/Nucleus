@@ -2,11 +2,21 @@ import fs from "node:fs";
 import path from "node:path";
 import type { TaskItem } from "@nucleus/protocol";
 
-export function listTasks(workspaceRoot: string, filterLane?: string, filterStatus?: string): void {
-  const tasksFile = path.resolve(workspaceRoot, ".nucleus", "tasks.json");
+export function listTasks(
+  workspaceRoot: string,
+  filterLane?: string,
+  filterStatus?: string,
+  showArchived: boolean = false
+): void {
+  const fileName = showArchived ? "tasks_archive.json" : "tasks.json";
+  const tasksFile = path.resolve(workspaceRoot, ".nucleus", fileName);
 
   if (!fs.existsSync(tasksFile)) {
-    console.log(`\nNo tasks found. Run inside a Nucleus workspace where tasks have been initialized.\n`);
+    if (showArchived) {
+      console.log(`\nNo archived tasks found in .nucleus/tasks_archive.json.\n`);
+    } else {
+      console.log(`\nNo tasks found. Run inside a Nucleus workspace where tasks have been initialized.\n`);
+    }
     return;
   }
 
@@ -20,7 +30,8 @@ export function listTasks(workspaceRoot: string, filterLane?: string, filterStat
       return true;
     });
 
-    console.log(`\n📋 Nucleus Task Board (${filtered.length} tasks)`);
+    const header = showArchived ? `📦 Nucleus Archived Tasks` : `📋 Nucleus Task Board`;
+    console.log(`\n${header} (${filtered.length} tasks)`);
     console.log(`================================================================================`);
     console.log(
       `${"ID".padEnd(16)} | ${"LANE".padEnd(10)} | ${"STATUS".padEnd(14)} | ${"ASSIGNED".padEnd(12)} | TITLE`
@@ -36,9 +47,62 @@ export function listTasks(workspaceRoot: string, filterLane?: string, filterStat
         `${t.id.padEnd(16)} | ${t.lane.padEnd(10)} | ${t.status.padEnd(14)} | ${assigned.padEnd(12)} | ${t.title}${meta}`
       );
     }
-    console.log(`================================================================================\n`);
+    console.log(`================================================================================`);
+    if (!showArchived) {
+      console.log(`(Tip: Run 'nucleus tasks --clean' to archive approved tasks, or '--archived' to view past tasks)\n`);
+    } else {
+      console.log(`(Archived tasks stored in .nucleus/tasks_archive.json)\n`);
+    }
   } catch (err: any) {
     console.error(`Failed to read task board:`, err.message);
+  }
+}
+
+export function archiveCompletedTasksLocally(
+  workspaceRoot: string
+): { archivedCount: number; remainingCount: number } {
+  const tasksFile = path.resolve(workspaceRoot, ".nucleus", "tasks.json");
+  const archiveFile = path.resolve(workspaceRoot, ".nucleus", "tasks_archive.json");
+
+  if (!fs.existsSync(tasksFile)) {
+    console.log(`\nNo tasks found to archive.\n`);
+    return { archivedCount: 0, remainingCount: 0 };
+  }
+
+  try {
+    const raw = fs.readFileSync(tasksFile, "utf8");
+    const tasks: TaskItem[] = JSON.parse(raw);
+
+    const activeTasks = tasks.filter((t) => t.status !== "approved");
+    const toArchive = tasks.filter((t) => t.status === "approved");
+
+    if (toArchive.length === 0) {
+      console.log(`\nTask board is already tidy. No "approved" tasks pending archival (${activeTasks.length} active tasks).\n`);
+      return { archivedCount: 0, remainingCount: activeTasks.length };
+    }
+
+    let existingArchive: TaskItem[] = [];
+    if (fs.existsSync(archiveFile)) {
+      try {
+        existingArchive = JSON.parse(fs.readFileSync(archiveFile, "utf8"));
+      } catch {}
+    }
+
+    const combinedArchive = [...existingArchive, ...toArchive];
+    fs.writeFileSync(archiveFile, JSON.stringify(combinedArchive, null, 2), "utf8");
+    fs.writeFileSync(tasksFile, JSON.stringify(activeTasks, null, 2), "utf8");
+
+    console.log(`\n📦 Successfully cleaned task board!`);
+    console.log(`Archived ${toArchive.length} completed task(s) to .nucleus/tasks_archive.json:`);
+    for (const t of toArchive) {
+      console.log(`  - [${t.id}] ${t.title} (${t.lane})`);
+    }
+    console.log(`Active task board now has ${activeTasks.length} open task(s).\n`);
+
+    return { archivedCount: toArchive.length, remainingCount: activeTasks.length };
+  } catch (err: any) {
+    console.error(`Failed to archive tasks:`, err.message);
+    return { archivedCount: 0, remainingCount: 0 };
   }
 }
 

@@ -63,6 +63,21 @@ These are the final polish tasks to complete the core MVP experience:
   - Updated coordinator server to include `available_tasks` array in `task:claim_failed` WebSocket events.
   - Verified with automated tests in `packages/cli/src/cli.test.ts` and `critique.integration.test.ts`.
 
+### 5. Spec File & Spec URL Task Integration [COMPLETED]
+- **Issue:** Complex tasks (especially frontend design, comprehensive backend contracts, and external Figma specs) need deep, granular descriptions or external URLs without cluttering the compact task summary.
+- **Implementation Status:**
+  - Added `spec_file`, `spec_url`, and `description` to `TaskItemSchema` in `@nucleus/protocol`.
+  - Updated `PEERS.md` template in `@nucleus/daemon` to instruct agent LLMs to prioritize reading local spec files (e.g., `CONTRACT/specs/...`) or following external design URLs.
+  - Enhanced CLI `nucleus tasks` display to render spec file paths and URLs alongside task summaries.
+  - Verified in `peers-index.test.ts` and protocol tests.
+
+### 6. Task Board Archival & Cleanup [COMPLETED]
+- **Issue:** Completed and reviewed tasks accumulate in `.nucleus/tasks.json`, cluttering agent context and token limits over long project lifecycles.
+- **Implementation Status:**
+  - Added atomic archival engine (`archiveCompletedTasks`) in `@nucleus/coordinator` and `@nucleus/daemon` moving completed tasks to `.nucleus/tasks_archive.json`.
+  - Added `-c, --clean` and `-a, --archived` flags to `nucleus tasks` CLI command.
+  - Verified with integration tests in `system-audit.test.ts` and `cli.test.ts`.
+
 ---
 
 ## Part 3: Beyond MVP (Future Feature Roadmap)
@@ -77,10 +92,11 @@ These are the final polish tasks to complete the core MVP experience:
 
 ---
 
-## Part 4: Tomorrow's Morning Checklist
+## Part 4: Operational Readiness Checklist
 
-When resuming work tomorrow:
-1. **Terminal 1:** Run `nucleus init --port 9876` in the project root.
-2. **Terminal 2:** Connect your backend lane (`nucleus join ...`).
-3. **Verify Invites:** Issue fresh tokens with `nucleus invite --lane <lane>` for teammates.
-4. **Begin MVP Polish:** Tackle the 4 action items in **Part 2** starting with the auto-reconnect backoff logic.
+Nucleus MVP and core enhancements are 100% operational:
+1. **Host Coordinator:** Run `nucleus init --port 9876` (or `nucleus init --tunnel` for remote contributors).
+2. **Issue Invites:** Generate lane tokens with `nucleus invite --lane backend` / `nucleus invite --lane frontend`.
+3. **Contributors:** Connect with `nucleus join <url> --token <token> --lane <lane> --name <handle>`.
+4. **Task Orchestration:** Define tasks in `.nucleus/tasks.json` with optional `spec_file` or `spec_url`. Clean completed tasks anytime with `nucleus tasks --clean`.
+5. **Next Major Milestone:** Explore post-MVP features in **Part 3** starting with **v1.1 Ephemeral Sidecar Test Runners** or **v1.4 Browser Mission Control Dashboard**.

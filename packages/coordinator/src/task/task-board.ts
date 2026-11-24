@@ -6,10 +6,12 @@ import { TaskItemSchema } from "@nucleus/protocol";
 export class TaskBoardManager {
   private readonly tasks: Map<string, TaskItem> = new Map();
   private readonly storagePath: string;
+  private readonly archivePath: string;
 
   constructor(storageDir: string) {
     fs.mkdirSync(storageDir, { recursive: true });
     this.storagePath = path.join(storageDir, "tasks.json");
+    this.archivePath = path.join(storageDir, "tasks_archive.json");
     this.loadFromDisk();
   }
 
@@ -69,6 +71,41 @@ export class TaskBoardManager {
 
   public getStoragePath(): string {
     return this.storagePath;
+  }
+
+  public getArchivePath(): string {
+    return this.archivePath;
+  }
+
+  public getArchivedTasks(): TaskItem[] {
+    if (!fs.existsSync(this.archivePath)) return [];
+    try {
+      const raw = fs.readFileSync(this.archivePath, "utf8");
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => TaskItemSchema.parse(item));
+      }
+    } catch {}
+    return [];
+  }
+
+  public archiveCompletedTasks(): { archivedCount: number; archivedTasks: TaskItem[] } {
+    const toArchive: TaskItem[] = [];
+    for (const [id, task] of this.tasks.entries()) {
+      if (task.status === "approved") {
+        toArchive.push(task);
+        this.tasks.delete(id);
+      }
+    }
+
+    if (toArchive.length > 0) {
+      const existing = this.getArchivedTasks();
+      const combined = [...existing, ...toArchive];
+      fs.writeFileSync(this.archivePath, JSON.stringify(combined, null, 2), "utf8");
+      this.persistToDisk();
+    }
+
+    return { archivedCount: toArchive.length, archivedTasks: toArchive };
   }
 
   private persistToDisk(): void {

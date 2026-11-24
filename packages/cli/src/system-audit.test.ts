@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { WebSocket } from "ws";
-import { CoordinatorServer } from "./coordinator-server.js";
+import { CoordinatorServer, LeaseMutex, buildMessage } from "@nucleus/coordinator";
 import {
   DaemonClient,
   WorkspaceJail,
@@ -12,9 +12,7 @@ import {
   BINARY_EXTENSIONS
 } from "@nucleus/daemon";
 import { SecretScanner } from "@nucleus/critic";
-import { LeaseMutex } from "../lock/mutex.js";
-import { buildMessage } from "./message-builder.js";
-import { TunnelManager, claimTaskLocally } from "@nucleus/cli";
+import { TunnelManager, claimTaskLocally } from "./index.js";
 
 const AUDIT_PORT = 9075;
 
@@ -126,6 +124,39 @@ describe("Nucleus System-Wide Audit: Validation, Efficiency, Performance & Secur
       expect(res?.url).toBe("wss://custom-route.trycloudflare.com");
       expect(res?.provider).toBe("custom");
       tm.stop();
+    });
+
+    it("should archive completed/approved tasks and keep active board clean", () => {
+      const board = server.getTaskBoard();
+      board.addTask({
+        id: "task-archive-01",
+        title: "Archivable Task",
+        lane: "backend",
+        status: "approved",
+        assigned_to: "dev",
+        depends_on_contracts: []
+      });
+      board.addTask({
+        id: "task-open-01",
+        title: "Still Open Task",
+        lane: "backend",
+        status: "active",
+        assigned_to: "dev",
+        depends_on_contracts: []
+      });
+
+      const initialCount = board.getAll().length;
+      const result = board.archiveCompletedTasks();
+      expect(result.archivedCount).toBeGreaterThanOrEqual(1);
+
+      // Active board only contains non-approved tasks
+      const active = board.getAll();
+      expect(active.every((t) => t.status !== "approved")).toBe(true);
+      expect(active.length).toBe(initialCount - result.archivedCount);
+
+      // Archive contains approved task
+      const archived = board.getArchivedTasks();
+      expect(archived.some((t) => t.id === "task-archive-01")).toBe(true);
     });
   });
 

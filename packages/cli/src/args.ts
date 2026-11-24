@@ -11,6 +11,8 @@ export interface ParsedCliArgs {
   lane?: string;
   workspace?: string;
   tunnel?: boolean;
+  clean?: boolean;
+  archived?: boolean;
   help?: boolean;
 }
 
@@ -24,6 +26,8 @@ export function parseCli(args: string[]): ParsedCliArgs {
     name: { type: "string" as const, short: "n" },
     workspace: { type: "string" as const, short: "w" },
     tunnel: { type: "boolean" as const },
+    clean: { type: "boolean" as const, short: "c" },
+    archived: { type: "boolean" as const, short: "a" },
     help: { type: "boolean" as const, short: "h" }
   };
 
@@ -56,6 +60,8 @@ export function parseCli(args: string[]): ParsedCliArgs {
       lane: values.lane,
       workspace: values.workspace,
       tunnel: values.tunnel,
+      clean: values.clean,
+      archived: values.archived,
       help: values.help
     };
   } catch (err: any) {
@@ -91,6 +97,8 @@ Options:
   -n, --name <string>       Your name / handle in the room
   -w, --workspace <path>    Project root path (default: current working directory)
       --tunnel              Start zero-config Cloudflare/ngrok tunnel for public internet invites
+  -c, --clean               Archive completed/approved tasks into .nucleus/tasks_archive.json
+  -a, --archived            View completed/archived tasks from .nucleus/tasks_archive.json
   -h, --help                Show this help message
 `);
 }
