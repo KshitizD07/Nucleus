@@ -45,6 +45,17 @@ export class TaskBoardReplica {
     return Array.from(this.tasks.values());
   }
 
+  private atomicWriteJson(filePath: string, data: unknown): void {
+    const dir = path.dirname(filePath);
+    fs.mkdirSync(dir, { recursive: true });
+    const tmp = path.join(
+      dir,
+      `.${path.basename(filePath)}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`
+    );
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
+    fs.renameSync(tmp, filePath);
+  }
+
   public getArchivedTasks(): TaskItem[] {
     if (!fs.existsSync(this.archiveFile)) return [];
     try {
@@ -57,17 +68,24 @@ export class TaskBoardReplica {
 
   public archiveCompletedTasks(): TaskItem[] {
     const toArchive: TaskItem[] = [];
-    for (const [id, task] of this.tasks.entries()) {
+    for (const task of this.tasks.values()) {
       if (task.status === "approved") {
         toArchive.push(task);
-        this.tasks.delete(id);
       }
     }
 
     if (toArchive.length > 0) {
       const existing = this.getArchivedTasks();
-      const combined = [...existing, ...toArchive];
-      fs.writeFileSync(this.archiveFile, JSON.stringify(combined, null, 2), "utf8");
+      const existingIds = new Set(existing.map((t) => t.id));
+      const combined = [...existing];
+      for (const t of toArchive) {
+        if (!existingIds.has(t.id)) combined.push(t);
+      }
+      this.atomicWriteJson(this.archiveFile, combined);
+
+      for (const t of toArchive) {
+        this.tasks.delete(t.id);
+      }
       this.saveToDisk();
     }
 
@@ -75,6 +93,6 @@ export class TaskBoardReplica {
   }
 
   private saveToDisk(): void {
-    fs.writeFileSync(this.tasksFile, JSON.stringify(this.getAll(), null, 2), "utf8");
+    this.atomicWriteJson(this.tasksFile, this.getAll());
   }
 }

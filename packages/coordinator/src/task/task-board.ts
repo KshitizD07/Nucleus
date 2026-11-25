@@ -350,6 +350,17 @@ export class TaskBoardManager {
     return this.archivePath;
   }
 
+  private atomicWriteJson(filePath: string, data: unknown): void {
+    const dir = path.dirname(filePath);
+    fs.mkdirSync(dir, { recursive: true });
+    const tmp = path.join(
+      dir,
+      `.${path.basename(filePath)}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`
+    );
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
+    fs.renameSync(tmp, filePath);
+  }
+
   public getArchivedTasks(): TaskItem[] {
     if (!fs.existsSync(this.archivePath)) return [];
     try {
@@ -364,26 +375,40 @@ export class TaskBoardManager {
 
   public archiveCompletedTasks(): { archivedCount: number; archivedTasks: TaskItem[] } {
     const toArchive: TaskItem[] = [];
-    for (const [id, task] of this.tasks.entries()) {
+    for (const task of this.tasks.values()) {
       if (task.status === "approved") {
         toArchive.push(task);
-        this.tasks.delete(id);
       }
     }
 
-    if (toArchive.length > 0) {
-      const existing = this.getArchivedTasks();
-      const combined = [...existing, ...toArchive];
-      fs.writeFileSync(this.archivePath, JSON.stringify(combined, null, 2), "utf8");
-      this.persistToDisk();
+    if (toArchive.length === 0) {
+      return { archivedCount: 0, archivedTasks: [] };
     }
+
+    // 1. Atomically persist updated archive BEFORE modifying active in-memory task map
+    const existing = this.getArchivedTasks();
+    const existingIds = new Set(existing.map((t) => t.id));
+    const combined = [...existing];
+    for (const t of toArchive) {
+      if (!existingIds.has(t.id)) {
+        combined.push(t);
+      }
+    }
+    this.atomicWriteJson(this.archivePath, combined);
+
+    // 2. Remove from active map only after archive write succeeds
+    for (const task of toArchive) {
+      this.tasks.delete(task.id);
+    }
+
+    // 3. Atomically persist updated active tasks
+    this.persistToDisk();
 
     return { archivedCount: toArchive.length, archivedTasks: toArchive };
   }
 
   private persistToDisk(): void {
-    const data = JSON.stringify(this.getAll(), null, 2);
-    fs.writeFileSync(this.storagePath, data, "utf8");
+    this.atomicWriteJson(this.storagePath, this.getAll());
   }
 
   private loadFromDisk(): void {
@@ -392,10 +417,24 @@ export class TaskBoardManager {
       const raw = fs.readFileSync(this.storagePath, "utf8");
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
+        // Self-healing recovery: if tasks were already archived prior to a crash, prune them from active tasks
+        const archived = this.getArchivedTasks();
+        const archivedIds = new Set(archived.map((t) => t.id));
+
+        let needsResave = false;
         for (const item of parsed) {
           const validated = TaskItemSchema.parse(item);
+          if (validated.status === "approved" && archivedIds.has(validated.id)) {
+            needsResave = true;
+            continue;
+          }
           this.tasks.set(validated.id, validated);
         }
+
+        if (needsResave) {
+          this.persistToDisk();
+        }
+
         try {
           this.validateGraphAcyclic();
         } catch (err: any) {

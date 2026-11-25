@@ -387,4 +387,79 @@ describe("TaskBoardManager Revision Tracking & Optimistic Concurrency", () => {
     expect(unblocked[0].id).toBe("task-contract-dep");
     expect(board.getTask("task-contract-dep")?.status).toBe("unassigned");
   });
+
+  it("should perform crash-safe atomic archival and self-heal if restarted after partial write", () => {
+    const board = new TaskBoardManager(tempDir);
+
+    board.addTask({
+      id: "task-completed-1",
+      title: "Completed Task 1",
+      lane: "backend",
+      status: "unassigned",
+      assigned_to: null,
+      depends_on_contracts: []
+    });
+
+    board.addTask({
+      id: "task-active-2",
+      title: "Active Task 2",
+      lane: "backend",
+      status: "unassigned",
+      assigned_to: null,
+      depends_on_contracts: []
+    });
+
+    // Mark task 1 approved (administrative force override)
+    board.updateStatus("task-completed-1", "approved", undefined, undefined, true);
+
+    // 1. Run archival
+    const archiveResult = board.archiveCompletedTasks();
+    expect(archiveResult.archivedCount).toBe(1);
+    expect(archiveResult.archivedTasks[0].id).toBe("task-completed-1");
+
+    // In-memory active tasks only contain active task 2
+    expect(board.getAll().length).toBe(1);
+    expect(board.getTask("task-completed-1")).toBeUndefined();
+    expect(board.getTask("task-active-2")?.status).toBe("unassigned");
+
+    // Verify disk files
+    const archivedOnDisk = board.getArchivedTasks();
+    expect(archivedOnDisk.length).toBe(1);
+    expect(archivedOnDisk[0].id).toBe("task-completed-1");
+
+    // 2. Idempotency: Running archive again does not duplicate entries
+    const secondArchive = board.archiveCompletedTasks();
+    expect(secondArchive.archivedCount).toBe(0);
+    expect(board.getArchivedTasks().length).toBe(1);
+
+    // 3. Simulated Crash Recovery:
+    // Suppose tasks.json still had task-completed-1 because a crash happened right before tasks.json was written
+    const tasksFilePath = board.getStoragePath();
+    const staleTasksJson = [
+      {
+        id: "task-completed-1",
+        title: "Completed Task 1",
+        lane: "backend",
+        status: "approved",
+        assigned_to: null,
+        depends_on_contracts: []
+      },
+      {
+        id: "task-active-2",
+        title: "Active Task 2",
+        lane: "backend",
+        status: "unassigned",
+        assigned_to: null,
+        depends_on_contracts: []
+      }
+    ];
+    fs.writeFileSync(tasksFilePath, JSON.stringify(staleTasksJson, null, 2), "utf8");
+
+    // Now instantiate a new TaskBoardManager (simulating restart after crash)
+    const recoveredBoard = new TaskBoardManager(tempDir);
+    // Self-healing: task-completed-1 was already in tasks_archive.json, so it was purged from active tasks!
+    expect(recoveredBoard.getTask("task-completed-1")).toBeUndefined();
+    expect(recoveredBoard.getTask("task-active-2")).toBeDefined();
+    expect(recoveredBoard.getAll().length).toBe(1);
+  });
 });
