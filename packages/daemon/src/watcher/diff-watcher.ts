@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { WorkspaceJail } from "../jail/jail.js";
 import type { LiveDiffStream } from "@nucleus/protocol";
+import { createUnifiedDiff } from "./diff-generator.js";
 
 export const GLOBAL_NON_BYPASSABLE_IGNORES: readonly string[] = [
   "node_modules",
@@ -64,6 +65,8 @@ export interface WorkspaceDiffWatcherOptions {
   debounceMs?: number;
   onDiffStream: (diff: LiveDiffStream) => void;
   onFocusChange: (filePath: string, action: "editing" | "idle" | "saved") => void;
+  onShadowSync?: (filePath: string, content: string) => void;
+  onShadowDelete?: (filePath: string) => void;
 }
 
 export class WorkspaceDiffWatcher {
@@ -74,6 +77,8 @@ export class WorkspaceDiffWatcher {
   private readonly debounceMs: number;
   private readonly onDiffStream: (diff: LiveDiffStream) => void;
   private readonly onFocusChange: (filePath: string, action: "editing" | "idle" | "saved") => void;
+  private readonly onShadowSync?: (filePath: string, content: string) => void;
+  private readonly onShadowDelete?: (filePath: string) => void;
   private watcher: fs.FSWatcher | null = null;
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
   private fileSnapshots: Map<string, string> = new Map();
@@ -88,6 +93,8 @@ export class WorkspaceDiffWatcher {
     this.debounceMs = options.debounceMs ?? 300;
     this.onDiffStream = options.onDiffStream;
     this.onFocusChange = options.onFocusChange;
+    this.onShadowSync = options.onShadowSync;
+    this.onShadowDelete = options.onShadowDelete;
   }
 
   public start(): void {
@@ -196,7 +203,25 @@ export class WorkspaceDiffWatcher {
       if (this.isIgnored(relativeFilePath) || this.isBinaryFile(relativeFilePath) || this.isSensitiveFile(relativeFilePath)) return;
 
       const fullPath = this.jail.resolveSafe(relativeFilePath);
-      if (!fs.existsSync(fullPath)) return;
+      if (!fs.existsSync(fullPath)) {
+        if (this.fileSnapshots.has(relativeFilePath)) {
+          const oldContent = this.fileSnapshots.get(relativeFilePath) ?? "";
+          this.fileSnapshots.delete(relativeFilePath);
+          this.onFocusChange(relativeFilePath, "idle");
+
+          const unifiedDiff = createUnifiedDiff(relativeFilePath, oldContent, "");
+          const diffStream: LiveDiffStream = {
+            lane: this.lane,
+            active_file: relativeFilePath,
+            files_changed: [relativeFilePath],
+            patch_summary: `Deleted ${path.basename(relativeFilePath)}`,
+            diff_hunk: unifiedDiff
+          };
+          this.onDiffStream(diffStream);
+          this.onShadowDelete?.(relativeFilePath);
+        }
+        return;
+      }
       const stat = fs.statSync(fullPath);
       if (!stat.isFile()) return;
 
@@ -226,7 +251,10 @@ export class WorkspaceDiffWatcher {
         return;
       }
 
-      // Calculate simple line diff summary
+      // Generate standard unified line diff hunk
+      const unifiedDiff = createUnifiedDiff(relativeFilePath, oldContent, newContent);
+
+      // Calculate line diff summary
       const oldLines = oldContent ? oldContent.split("\n").length : 0;
       const newLines = newContent.split("\n").length;
       const delta = newLines - oldLines;
@@ -237,10 +265,13 @@ export class WorkspaceDiffWatcher {
         active_file: relativeFilePath,
         files_changed: [relativeFilePath],
         patch_summary: patchSummary,
-        diff_hunk: newContent.length < 50_000 ? newContent : "(diff truncated, file exceeds 50KB)"
+        diff_hunk: unifiedDiff.length < 50_000 ? unifiedDiff : "(diff truncated, patch exceeds 50KB)"
       };
 
       this.onDiffStream(diffStream);
+
+      // Decoupled full shadow file synchronization
+      this.onShadowSync?.(relativeFilePath, newContent);
     } catch {
       // Ignore transient file lock / deletion errors during active build
     }

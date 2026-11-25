@@ -46,8 +46,15 @@ export const LaneShadowSyncSchema = z.object({
   version: z.number().int().positive()
 });
 
+export const LaneShadowDeleteSchema = z.object({
+  source_lane: z.string().min(1),
+  file_path: z.string().min(1),
+  version: z.number().int().positive()
+});
+
 export type LiveDiffStream = z.infer<typeof LiveDiffStreamSchema>;
 export type FileFocusChange = z.infer<typeof FileFocusChangeSchema>;
 export type PeerFileReadRequest = z.infer<typeof PeerFileReadRequestSchema>;
 export type PeerFileReadResponse = z.infer<typeof PeerFileReadResponseSchema>;
 export type LaneShadowSync = z.infer<typeof LaneShadowSyncSchema>;
+export type LaneShadowDelete = z.infer<typeof LaneShadowDeleteSchema>;

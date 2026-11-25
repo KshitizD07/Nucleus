@@ -120,6 +120,8 @@ export class JoinRunner {
         );
       } else if (type === "sharing:lane_shadow_sync") {
         this.shadowMirror?.applySync(payload);
+      } else if (type === "sharing:lane_shadow_delete") {
+        this.shadowMirror?.deleteShadowFile(payload.source_lane, payload.file_path, payload.version);
       } else if (type === "task:status") {
         this.isApplyingInbound = true;
         this.taskReplica?.applyUpdate(payload);
@@ -161,11 +163,12 @@ export class JoinRunner {
       lane,
       onDiffStream: (diff) => {
         this.client?.streamDiff(diff);
-        if (diff.diff_hunk && diff.active_file) {
-          if (!diff.diff_hunk.includes("[POTENTIAL SECRET DETECTED")) {
-            this.client?.syncLaneShadow(lane, diff.active_file, diff.diff_hunk, Date.now());
-          }
-        }
+      },
+      onShadowSync: (filePath, content) => {
+        this.client?.syncLaneShadow(lane, filePath, content, Date.now());
+      },
+      onShadowDelete: (filePath) => {
+        this.client?.deleteLaneShadow(lane, filePath, Date.now());
       },
       onFocusChange: (filePath, action) => {
         this.client?.notifyFocusChange(filePath, action);

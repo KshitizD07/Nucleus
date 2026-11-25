@@ -322,6 +322,47 @@ export class CoordinatorServer {
         return;
       }
 
+      if (envelope.type === "sharing:lane_shadow_delete") {
+        const node = this.registry.get(node_id);
+        const authoritativeLane = node?.lane ?? (envelope.payload as any)?.source_lane;
+
+        try {
+          const del = envelope.payload as { source_lane: string; file_path: string; version: number };
+          const taskStorageDir = path.dirname(this.taskBoard.getStoragePath());
+          const shadowLaneDir = path.resolve(taskStorageDir, "shadows", authoritativeLane);
+          const shadowFile = path.resolve(shadowLaneDir, del.file_path);
+
+          const rel = path.relative(shadowLaneDir, shadowFile);
+          const laneWithSep = shadowLaneDir.endsWith(path.sep) ? shadowLaneDir : shadowLaneDir + path.sep;
+          if (!rel.startsWith("..") && !path.isAbsolute(rel) && (shadowFile.startsWith(laneWithSep) || shadowFile === shadowLaneDir)) {
+            if (fs.existsSync(shadowFile)) {
+              fs.unlinkSync(shadowFile);
+              let dir = path.dirname(shadowFile);
+              while (dir.startsWith(laneWithSep) && dir !== shadowLaneDir) {
+                if (fs.readdirSync(dir).length === 0) {
+                  fs.rmdirSync(dir);
+                  dir = path.dirname(dir);
+                } else {
+                  break;
+                }
+              }
+            }
+          }
+        } catch {
+          // Ignore transient delete errors
+        }
+
+        const delPayload = envelope.payload as { source_lane: string; file_path: string; version: number };
+        this.broadcast(
+          buildMessage(this.roomId, node_id, "sharing:lane_shadow_delete", {
+            ...delPayload,
+            source_lane: authoritativeLane
+          }),
+          node_id
+        );
+        return;
+      }
+
       if (envelope.type === "sharing:live_diff_stream") {
         const node = this.registry.get(node_id);
         const diffPayload = envelope.payload as any;

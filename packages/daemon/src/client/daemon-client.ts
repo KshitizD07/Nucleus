@@ -161,6 +161,14 @@ export class DaemonClient {
     });
   }
 
+  public deleteLaneShadow(sourceLane: string, filePath: string, version: number): void {
+    this.send("sharing:lane_shadow_delete", {
+      source_lane: sourceLane,
+      file_path: filePath,
+      version
+    });
+  }
+
   public claimTask(taskId: string, displayName?: string): void {
     this.send("task:claim", {
       task_id: taskId,

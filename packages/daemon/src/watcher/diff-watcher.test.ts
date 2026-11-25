@@ -136,4 +136,108 @@ describe("WorkspaceDiffWatcher Hardened Ignore & Binary Filter", () => {
 
     watcher.stop();
   });
+
+  it("should stream unified line diffs for file edits and handle deletions", async () => {
+    let capturedDiff: any = null;
+    let deletedFile: string | null = null;
+    let syncedContent: string | null = null;
+
+    const watcher = new WorkspaceDiffWatcher({
+      workspaceRoot: tempDir,
+      lane: "backend",
+      debounceMs: 50,
+      onDiffStream: (diff) => {
+        capturedDiff = diff;
+      },
+      onShadowSync: (_file, content) => {
+        syncedContent = content;
+      },
+      onShadowDelete: (file) => {
+        deletedFile = file;
+      },
+      onFocusChange: () => {}
+    });
+
+    watcher.start();
+
+    // 1. File creation
+    const testFile = path.join(tempDir, "calc.ts");
+    fs.writeFileSync(testFile, "line1\nline2\n", "utf8");
+
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(capturedDiff).not.toBeNull();
+    expect(capturedDiff.diff_hunk).toContain("--- /dev/null");
+    expect(capturedDiff.diff_hunk).toContain("+++ b/calc.ts");
+    expect(capturedDiff.diff_hunk).toContain("+line1");
+    expect(capturedDiff.diff_hunk).toContain("+line2");
+    expect(syncedContent).toBe("line1\nline2\n");
+
+    // 2. File modification (only line 2 changed)
+    capturedDiff = null;
+    fs.writeFileSync(testFile, "line1\nline2_modified\n", "utf8");
+
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(capturedDiff).not.toBeNull();
+    expect(capturedDiff.diff_hunk).toContain("--- a/calc.ts");
+    expect(capturedDiff.diff_hunk).toContain("+++ b/calc.ts");
+    expect(capturedDiff.diff_hunk).toContain("-line2");
+    expect(capturedDiff.diff_hunk).toContain("+line2_modified");
+    expect(capturedDiff.diff_hunk).toContain(" line1"); // Context line
+    expect(syncedContent).toBe("line1\nline2_modified\n");
+
+    // 3. File deletion
+    capturedDiff = null;
+    fs.unlinkSync(testFile);
+
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(capturedDiff).not.toBeNull();
+    expect(capturedDiff.diff_hunk).toContain("--- a/calc.ts");
+    expect(capturedDiff.diff_hunk).toContain("+++ /dev/null");
+    expect(deletedFile).toBe("calc.ts");
+
+    watcher.stop();
+  });
+
+  it("should decouple shadow sync from diff truncation for files larger than 50KB", async () => {
+    let capturedDiff: any = null;
+    let syncedContent: string | null = null;
+
+    const watcher = new WorkspaceDiffWatcher({
+      workspaceRoot: tempDir,
+      lane: "backend",
+      debounceMs: 50,
+      onDiffStream: (diff) => {
+        capturedDiff = diff;
+      },
+      onShadowSync: (_file, content) => {
+        syncedContent = content;
+      },
+      onFocusChange: () => {}
+    });
+
+    watcher.start();
+
+    // Generate a file larger than 50KB (e.g. 65KB)
+    const largeContent = "// Header\n" + "console.log('padding line');\n".repeat(2500);
+    expect(largeContent.length).toBeGreaterThan(50_000);
+
+    const testFile = path.join(tempDir, "large.ts");
+    fs.writeFileSync(testFile, largeContent, "utf8");
+
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(capturedDiff).not.toBeNull();
+    // Diff hunk for 65KB diff is truncated to keep websocket frames lightweight
+    expect(capturedDiff.diff_hunk).toBe("(diff truncated, patch exceeds 50KB)");
+
+    // Crucially: shadow sync receives full, untruncated content!
+    const finalContent: string = syncedContent ?? "";
+    expect(finalContent.length).toBe(largeContent.length);
+    expect(finalContent).toBe(largeContent);
+
+    watcher.stop();
+  });
 });

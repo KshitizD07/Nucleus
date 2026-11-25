@@ -239,4 +239,66 @@ describe("Milestone 3: Live Diff Streaming, Shadows & Agent Context (.nucleus/PE
     daemonFE.sever();
     await new Promise((r) => setTimeout(r, 100));
   });
+
+  it("should synchronize and delete shadow files across peers through coordinator", async () => {
+    const tokenBE = coordinator.issueInvite("backend");
+    const tokenFE = coordinator.issueInvite("frontend");
+
+    const feShadowMirror = new ShadowMirror(FE_WORKSPACE);
+
+    const daemonBE = new DaemonClient({
+      url: `ws://localhost:${TEST_PORT}`,
+      node_id: "node-be-sync",
+      join_token: tokenBE,
+      workspace_path: BE_WORKSPACE,
+      lane: "backend"
+    });
+
+    const daemonFE = new DaemonClient({
+      url: `ws://localhost:${TEST_PORT}`,
+      node_id: "node-fe-sync",
+      join_token: tokenFE,
+      workspace_path: FE_WORKSPACE,
+      lane: "frontend"
+    });
+
+    await daemonBE.connect();
+    await daemonFE.connect();
+
+    daemonFE.onMessage = (type, payload: any) => {
+      if (type === "sharing:lane_shadow_sync") {
+        feShadowMirror.applySync(payload);
+      } else if (type === "sharing:lane_shadow_delete") {
+        feShadowMirror.deleteShadowFile(payload.source_lane, payload.file_path, payload.version);
+      }
+    };
+
+    // 1. BE syncs a file
+    const fileContent = "export const secretConfig = { port: 3000 };";
+    daemonBE.syncLaneShadow("backend", "config/app.ts", fileContent, 1);
+
+    await new Promise((r) => setTimeout(r, 150));
+
+    expect(feShadowMirror.readShadowFile("backend", "config/app.ts")).toBe(fileContent);
+
+    // Also check coordinator's internal shadows directory
+    const coordShadowFile = path.resolve(LOG_DIR, "shadows", "backend", "config", "app.ts");
+    expect(fs.existsSync(coordShadowFile)).toBe(true);
+    expect(fs.readFileSync(coordShadowFile, "utf8")).toBe(fileContent);
+
+    // 2. BE deletes the file
+    daemonBE.deleteLaneShadow("backend", "config/app.ts", 2);
+
+    await new Promise((r) => setTimeout(r, 150));
+
+    // File must be deleted on FE shadow mirror
+    expect(feShadowMirror.readShadowFile("backend", "config/app.ts")).toBeNull();
+
+    // File must be deleted on Coordinator disk
+    expect(fs.existsSync(coordShadowFile)).toBe(false);
+
+    daemonBE.sever();
+    daemonFE.sever();
+    await new Promise((r) => setTimeout(r, 100));
+  });
 });

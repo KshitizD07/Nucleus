@@ -49,6 +49,47 @@ export class ShadowMirror {
     return fs.readFileSync(safeTarget, "utf8");
   }
 
+  /**
+   * Delete a shadow file from `.nucleus/shadows/<lane>/<file_path>` when a peer deletes it
+   */
+  public deleteShadowFile(sourceLane: string, filePath: string, version?: number): boolean {
+    const key = `${sourceLane}:${filePath}`;
+    const currentVersion = this.fileVersions.get(key) ?? 0;
+
+    if (version !== undefined && version <= currentVersion) {
+      return false;
+    }
+
+    const relativeTarget = path.join(".nucleus", "shadows", sourceLane, filePath);
+    const safeTarget = this.jail.resolveSafe(relativeTarget);
+
+    if (fs.existsSync(safeTarget)) {
+      try {
+        fs.unlinkSync(safeTarget);
+        let dir = path.dirname(safeTarget);
+        const laneDir = path.join(this.shadowsBaseDir, sourceLane);
+        while (dir.startsWith(laneDir) && dir !== laneDir) {
+          if (fs.readdirSync(dir).length === 0) {
+            fs.rmdirSync(dir);
+            dir = path.dirname(dir);
+          } else {
+            break;
+          }
+        }
+      } catch {
+        // Ignore file system race or deletion errors
+      }
+    }
+
+    if (version !== undefined) {
+      this.fileVersions.set(key, version);
+    } else {
+      this.fileVersions.delete(key);
+    }
+
+    return true;
+  }
+
   public clearLane(sourceLane: string): void {
     const laneDir = path.join(this.shadowsBaseDir, sourceLane);
     if (fs.existsSync(laneDir)) {
