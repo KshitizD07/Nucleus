@@ -3,6 +3,16 @@ import path from "node:path";
 import type { TaskItem, TaskStatus } from "@nucleus/protocol";
 import { TaskItemSchema } from "@nucleus/protocol";
 
+export const LEGAL_TASK_TRANSITIONS: Record<TaskStatus, readonly TaskStatus[]> = {
+  blocked: ["unassigned"],
+  unassigned: ["active", "assigned"],
+  assigned: ["active", "unassigned"],
+  active: ["in_review", "unassigned"],
+  in_review: ["approved", "changes_requested", "active", "unassigned"],
+  changes_requested: ["active", "in_review", "unassigned"],
+  approved: [] // Terminal state
+};
+
 export class TaskBoardManager {
   private readonly tasks: Map<string, TaskItem> = new Map();
   private readonly storagePath: string;
@@ -54,6 +64,18 @@ export class TaskBoardManager {
         reason: `Task ${taskId} is currently blocked pending completion of preceding turns/tasks.`
       };
     }
+    if (task.status === "approved") {
+      return {
+        success: false,
+        reason: `Task ${taskId} is already approved and completed.`
+      };
+    }
+    if (task.status === "in_review") {
+      return {
+        success: false,
+        reason: `Task ${taskId} is currently submitted for review.`
+      };
+    }
     const assignee = displayName || nodeId;
     if (task.assigned_to && task.assigned_to !== assignee && task.assigned_to !== nodeId) {
       return { success: false, reason: `Task ${taskId} is already claimed by ${task.assigned_to}` };
@@ -72,7 +94,8 @@ export class TaskBoardManager {
     taskId: string,
     status: TaskStatus,
     branch?: string,
-    expectedRevision?: number
+    expectedRevision?: number,
+    force = false
   ): {
     success: boolean;
     task?: TaskItem;
@@ -89,6 +112,16 @@ export class TaskBoardManager {
         success: false,
         reason: `Conflict: Stale task revision ${expectedRevision} (current: ${task.revision})`
       };
+    }
+
+    if (!force && status !== task.status) {
+      const allowed = LEGAL_TASK_TRANSITIONS[task.status] ?? [];
+      if (!allowed.includes(status)) {
+        return {
+          success: false,
+          reason: `Illegal task transition: Cannot move task '${taskId}' from '${task.status}' to '${status}'`
+        };
+      }
     }
 
     task.status = status;

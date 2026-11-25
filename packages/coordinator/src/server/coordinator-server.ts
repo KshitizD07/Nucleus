@@ -584,7 +584,13 @@ export class CoordinatorServer {
       return;
     }
 
-    const result = this.taskBoard.updateStatus(update.task_id, update.status, update.branch, update.expected_revision);
+    const result = this.taskBoard.updateStatus(
+      update.task_id,
+      update.status,
+      update.branch,
+      update.expected_revision,
+      isInitiatorOrJudge
+    );
 
     if (result.success && result.task) {
       this.eventLog.append("task_status_changed", { task_id: update.task_id, status: update.status, node_id });

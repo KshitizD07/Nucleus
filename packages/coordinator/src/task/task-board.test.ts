@@ -101,4 +101,57 @@ describe("TaskBoardManager Revision Tracking & Optimistic Concurrency", () => {
     // State remains at revision 2!
     expect(replica.getTask("task-replica-test")?.status).toBe("active");
   });
+
+  it("should enforce legal state transitions and reject invalid state jumps", () => {
+    const board = new TaskBoardManager(tempDir);
+    board.addTask({
+      id: "task-fsm",
+      title: "State Machine Task",
+      lane: "backend",
+      status: "unassigned",
+      assigned_to: null,
+      depends_on_contracts: []
+    });
+
+    // 1. Direct jump unassigned -> approved is ILLEGAL
+    const invalidJump = board.updateStatus("task-fsm", "approved");
+    expect(invalidJump.success).toBe(false);
+    expect(invalidJump.reason).toContain("Illegal task transition: Cannot move task 'task-fsm' from 'unassigned' to 'approved'");
+
+    // 2. Legal progression: unassigned -> active (via claim)
+    const claimed = board.claimTask("task-fsm", "node-1", undefined, "backend", "Dev");
+    expect(claimed.success).toBe(true);
+
+    // 3. active -> in_review is LEGAL
+    const review = board.updateStatus("task-fsm", "in_review");
+    expect(review.success).toBe(true);
+
+    // 4. in_review -> changes_requested is LEGAL
+    const changesReq = board.updateStatus("task-fsm", "changes_requested");
+    expect(changesReq.success).toBe(true);
+
+    // 5. changes_requested -> active is LEGAL (resume work)
+    const resume = board.updateStatus("task-fsm", "active");
+    expect(resume.success).toBe(true);
+
+    // 6. active -> in_review -> approved is LEGAL
+    board.updateStatus("task-fsm", "in_review");
+    const approved = board.updateStatus("task-fsm", "approved");
+    expect(approved.success).toBe(true);
+
+    // 7. approved is TERMINAL: approved -> active or in_review is ILLEGAL
+    const tryReopen = board.updateStatus("task-fsm", "active");
+    expect(tryReopen.success).toBe(false);
+    expect(tryReopen.reason).toContain("Illegal task transition: Cannot move task 'task-fsm' from 'approved' to 'active'");
+
+    // 8. Cannot claim an approved task
+    const claimApproved = board.claimTask("task-fsm", "node-2");
+    expect(claimApproved.success).toBe(false);
+    expect(claimApproved.reason).toContain("already approved");
+
+    // 9. Administrative force override is honored
+    const forced = board.updateStatus("task-fsm", "unassigned", undefined, undefined, true);
+    expect(forced.success).toBe(true);
+    expect(board.getTask("task-fsm")?.status).toBe("unassigned");
+  });
 });

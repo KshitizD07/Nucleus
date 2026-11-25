@@ -205,7 +205,7 @@ describe("Milestone 5: Developer CLI & Room Runner Integration", () => {
     // Coordinator unblocks dependent tasks when round 1 pro is approved
     const server = host["coordinator"];
     expect(server).toBeDefined();
-    server!.getTaskBoard().updateStatus("round-01-pro", "approved");
+    server!.getTaskBoard().updateStatus("round-01-pro", "approved", undefined, undefined, true);
 
     const updatedContra = server!.getTaskBoard().getTask("round-01-contra");
     expect(updatedContra?.status).toBe("unassigned");
@@ -216,7 +216,7 @@ describe("Milestone 5: Developer CLI & Room Runner Integration", () => {
     expect(contraClaimOk).toBe(true);
 
     // When round 1 contra is approved, Round 2 automatically and dynamically spawns!
-    const contraApprovalResult = server!.getTaskBoard().updateStatus("round-01-contra", "approved");
+    const contraApprovalResult = server!.getTaskBoard().updateStatus("round-01-contra", "approved", undefined, undefined, true);
     expect(contraApprovalResult.spawnedTasks).toBeDefined();
     expect(contraApprovalResult.spawnedTasks!.length).toBe(2);
 
