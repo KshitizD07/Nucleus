@@ -184,4 +184,207 @@ describe("TaskBoardManager Revision Tracking & Optimistic Concurrency", () => {
     const sameClaim = board.claimTask("task-identity", "rohan-laptop-01", undefined, "backend", "Rohan");
     expect(sameClaim.success).toBe(true);
   });
+
+  it("should enforce strict topological dependency ordering and reject non-existent task dependencies", () => {
+    const board = new TaskBoardManager(tempDir);
+
+    // 1. Adding task depending on non-existent task must throw
+    expect(() => {
+      board.addTask({
+        id: "task-child",
+        title: "Child Task",
+        lane: "backend",
+        status: "blocked",
+        assigned_to: null,
+        depends_on_contracts: ["ghost-task-404"]
+      });
+    }).toThrow(/Referenced task 'ghost-task-404' does not exist in task board/);
+
+    // 2. Adding parent task first succeeds
+    board.addTask({
+      id: "task-parent",
+      title: "Parent Task",
+      lane: "backend",
+      status: "unassigned",
+      assigned_to: null,
+      depends_on_contracts: []
+    });
+
+    // 3. Adding child task after parent exists succeeds
+    expect(() => {
+      board.addTask({
+        id: "task-child",
+        title: "Child Task",
+        lane: "backend",
+        status: "blocked",
+        assigned_to: null,
+        depends_on_contracts: ["task-parent"]
+      });
+    }).not.toThrow();
+
+    expect(board.getTask("task-child")?.status).toBe("blocked");
+  });
+
+  it("should detect and reject dependency cycles (self, 2-node, and transitive cycles)", () => {
+    const board = new TaskBoardManager(tempDir);
+
+    // 1. Self-dependency rejection
+    expect(() => {
+      board.addTask({
+        id: "task-self",
+        title: "Self Dependent Task",
+        lane: "backend",
+        status: "blocked",
+        assigned_to: null,
+        depends_on_contracts: ["task-self"]
+      });
+    }).toThrow(/Task 'task-self' cannot depend on itself/);
+
+    // 2. Setup A and B
+    board.addTask({
+      id: "task-A",
+      title: "Task A",
+      lane: "backend",
+      status: "unassigned",
+      assigned_to: null,
+      depends_on_contracts: []
+    });
+
+    board.addTask({
+      id: "task-B",
+      title: "Task B",
+      lane: "backend",
+      status: "blocked",
+      assigned_to: null,
+      depends_on_contracts: ["task-A"]
+    });
+
+    // 3. Re-adding/updating Task A to depend on Task B forms a 2-node cycle (A -> B -> A)
+    expect(() => {
+      board.addTask({
+        id: "task-A",
+        title: "Task A updated",
+        lane: "backend",
+        status: "blocked",
+        assigned_to: null,
+        depends_on_contracts: ["task-B"]
+      });
+    }).toThrow(/Dependency cycle detected: task-A -> task-B -> task-A/);
+
+    // 4. Setup Transitive Cycle (A -> B -> C -> A)
+    board.addTask({
+      id: "task-C",
+      title: "Task C",
+      lane: "backend",
+      status: "blocked",
+      assigned_to: null,
+      depends_on_contracts: ["task-B"]
+    });
+
+    expect(() => {
+      board.addTask({
+        id: "task-A",
+        title: "Task A with transitive cycle",
+        lane: "backend",
+        status: "blocked",
+        assigned_to: null,
+        depends_on_contracts: ["task-C"]
+      });
+    }).toThrow(/Dependency cycle detected: task-A -> task-C -> task-B -> task-A/);
+  });
+
+  it("should allow valid DAG structures such as diamond dependencies", () => {
+    const board = new TaskBoardManager(tempDir);
+
+    // Diamond DAG:
+    //      A (root)
+    //     / \
+    //    B   C
+    //     \ /
+    //      D (depends on B and C)
+    board.addTask({
+      id: "node-A",
+      title: "Root A",
+      lane: "backend",
+      status: "unassigned",
+      assigned_to: null,
+      depends_on_contracts: []
+    });
+
+    board.addTask({
+      id: "node-B",
+      title: "Branch B",
+      lane: "backend",
+      status: "blocked",
+      assigned_to: null,
+      depends_on_contracts: ["node-A"]
+    });
+
+    board.addTask({
+      id: "node-C",
+      title: "Branch C",
+      lane: "backend",
+      status: "blocked",
+      assigned_to: null,
+      depends_on_contracts: ["node-A"]
+    });
+
+    expect(() => {
+      board.addTask({
+        id: "node-D",
+        title: "Join D",
+        lane: "backend",
+        status: "blocked",
+        assigned_to: null,
+        depends_on_contracts: ["node-B", "node-C"]
+      });
+    }).not.toThrow();
+
+    expect(board.getTask("node-D")?.status).toBe("blocked");
+  });
+
+  it("should strictly validate contract dependencies and auto-unblock only when satisfied", () => {
+    const mockContracts: Record<string, { filePath: string; content: string; version: number }> = {};
+    const mockStore = {
+      get: (p: string) => mockContracts[p]
+    };
+
+    const board = new TaskBoardManager(tempDir, mockStore);
+
+    // 1. Task depending on non-existent contract remains blocked
+    board.addTask({
+      id: "task-contract-dep",
+      title: "Contract Dep Task",
+      lane: "backend",
+      status: "blocked",
+      assigned_to: null,
+      depends_on_contracts: ["CONTRACT/specs.md@2"]
+    });
+
+    // Unblocking check: contract doesn't exist yet -> remains blocked
+    let unblocked = board.evaluateUnblockedTasks();
+    expect(unblocked.length).toBe(0);
+    expect(board.getTask("task-contract-dep")?.status).toBe("blocked");
+
+    // 2. Publish contract at version 1 (insufficient: task needs @2)
+    mockContracts["specs.md"] = {
+      filePath: "specs.md",
+      content: "# Specs v1",
+      version: 1
+    };
+    unblocked = board.evaluateUnblockedTasks();
+    expect(unblocked.length).toBe(0);
+    expect(board.getTask("task-contract-dep")?.status).toBe("blocked");
+
+    // 3. Publish contract at version 2 -> task auto-unblocks to unassigned!
+    mockContracts["specs.md"] = {
+      filePath: "specs.md",
+      content: "# Specs v2",
+      version: 2
+    };
+    unblocked = board.evaluateUnblockedTasks();
+    expect(unblocked.length).toBe(1);
+    expect(unblocked[0].id).toBe("task-contract-dep");
+    expect(board.getTask("task-contract-dep")?.status).toBe("unassigned");
+  });
 });

@@ -58,7 +58,7 @@ export class CoordinatorServer {
     this.eventLog = new EventLog(options.logDir, options.roomId);
     this.invites = new InviteStore();
     this.contractStore = new ContractStore(options.contractDir ?? "./CONTRACT");
-    this.taskBoard = new TaskBoardManager(options.taskDir ?? options.logDir);
+    this.taskBoard = new TaskBoardManager(options.taskDir ?? options.logDir, this.contractStore);
     this.criticPipeline = new AICriticPipeline(new AutoLLMCriticProvider());
     this.sockets = new Map();
     this.maxClients = options.maxClients ?? 32;
@@ -492,6 +492,11 @@ export class CoordinatorServer {
       }),
       node_id
     );
+
+    const unblockedTasks = this.taskBoard.evaluateUnblockedTasks();
+    for (const t of unblockedTasks) {
+      this.broadcast(buildMessage(this.roomId, "coordinator", "task:status", t));
+    }
   }
 
   private handleTaskClaim(node_id: string, ws: WebSocket, payload: unknown): void {

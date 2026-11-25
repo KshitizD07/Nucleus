@@ -13,16 +13,138 @@ export const LEGAL_TASK_TRANSITIONS: Record<TaskStatus, readonly TaskStatus[]> =
   approved: [] // Terminal state
 };
 
+export interface ContractStoreLike {
+  get(filePath: string): { filePath: string; content: string; version: number } | undefined;
+}
+
 export class TaskBoardManager {
   private readonly tasks: Map<string, TaskItem> = new Map();
   private readonly storagePath: string;
   private readonly archivePath: string;
+  private readonly contractStore?: ContractStoreLike;
 
-  constructor(storageDir: string) {
+  constructor(storageDir: string, contractStore?: ContractStoreLike) {
     fs.mkdirSync(storageDir, { recursive: true });
     this.storagePath = path.join(storageDir, "tasks.json");
     this.archivePath = path.join(storageDir, "tasks_archive.json");
+    this.contractStore = contractStore;
     this.loadFromDisk();
+  }
+
+  public isContractRef(dep: string): boolean {
+    if (/^CONTRACT\//i.test(dep)) return true;
+    const clean = dep.split("@")[0].trim();
+    const ext = path.extname(clean).toLowerCase();
+    if ([".md", ".json", ".yaml", ".yml", ".txt"].includes(ext)) return true;
+    if (this.contractStore && this.contractStore.get(clean) !== undefined) return true;
+    return false;
+  }
+
+  public parseContractRef(dep: string): { filePath: string; requiredVersion: number } {
+    let clean = dep.replace(/^CONTRACT\//i, "").trim();
+    let requiredVersion = 1;
+    if (clean.includes("@")) {
+      const parts = clean.split("@");
+      clean = parts[0].trim();
+      const ver = parseInt(parts[1].trim(), 10);
+      if (!isNaN(ver) && ver > 0) {
+        requiredVersion = ver;
+      }
+    }
+    return { filePath: clean, requiredVersion };
+  }
+
+  public isContractSatisfied(dep: string): boolean {
+    const { filePath, requiredVersion } = this.parseContractRef(dep);
+    if (this.contractStore) {
+      const entry = this.contractStore.get(filePath);
+      if (!entry) return false;
+      return entry.version >= requiredVersion && entry.content.trim().length > 0;
+    }
+
+    const directPath = path.resolve(filePath);
+    const contractDirPath = path.resolve("CONTRACT", filePath);
+    if (fs.existsSync(directPath) && fs.statSync(directPath).isFile()) {
+      return fs.readFileSync(directPath, "utf8").trim().length > 0;
+    }
+    if (fs.existsSync(contractDirPath) && fs.statSync(contractDirPath).isFile()) {
+      return fs.readFileSync(contractDirPath, "utf8").trim().length > 0;
+    }
+    return false;
+  }
+
+  public areDependenciesMet(task: TaskItem): boolean {
+    if (!task.depends_on_contracts || task.depends_on_contracts.length === 0) {
+      return true;
+    }
+    return task.depends_on_contracts.every((dep) => {
+      if (this.isContractRef(dep)) {
+        return this.isContractSatisfied(dep);
+      }
+      const depTask = this.tasks.get(dep);
+      return depTask !== undefined && depTask.status === "approved";
+    });
+  }
+
+  public evaluateUnblockedTasks(): TaskItem[] {
+    const unblockedTasks: TaskItem[] = [];
+    for (const other of this.tasks.values()) {
+      if (other.status === "blocked" && other.depends_on_contracts && other.depends_on_contracts.length > 0) {
+        if (this.areDependenciesMet(other)) {
+          other.status = "unassigned";
+          other.revision = (other.revision ?? 1) + 1;
+          unblockedTasks.push(other);
+        }
+      }
+    }
+    if (unblockedTasks.length > 0) {
+      this.persistToDisk();
+    }
+    return unblockedTasks;
+  }
+
+  private detectCycle(newTaskId: string, newDependencies: string[]): void {
+    const visited = new Set<string>();
+    const recStack: string[] = [newTaskId];
+
+    const getDeps = (id: string): string[] => {
+      if (id === newTaskId) {
+        return newDependencies;
+      }
+      return this.tasks.get(id)?.depends_on_contracts ?? [];
+    };
+
+    const dfs = (currId: string): boolean => {
+      const deps = getDeps(currId);
+      for (const dep of deps) {
+        if (this.isContractRef(dep)) continue;
+
+        if (dep === newTaskId) {
+          recStack.push(dep);
+          return true;
+        }
+
+        if (!visited.has(dep)) {
+          visited.add(dep);
+          recStack.push(dep);
+          if (dfs(dep)) {
+            return true;
+          }
+          recStack.pop();
+        }
+      }
+      return false;
+    };
+
+    if (dfs(newTaskId)) {
+      throw new Error(`Dependency cycle detected: ${recStack.join(" -> ")}`);
+    }
+  }
+
+  public validateGraphAcyclic(): void {
+    for (const [id, task] of this.tasks.entries()) {
+      this.detectCycle(id, task.depends_on_contracts ?? []);
+    }
   }
 
   public addTask(task: TaskItem): void {
@@ -30,6 +152,25 @@ export class TaskBoardManager {
       ...task,
       revision: task.revision ?? 1
     });
+
+    if (validated.depends_on_contracts && validated.depends_on_contracts.includes(validated.id)) {
+      throw new Error(`Invalid task dependency: Task '${validated.id}' cannot depend on itself`);
+    }
+
+    if (validated.depends_on_contracts) {
+      for (const dep of validated.depends_on_contracts) {
+        if (!this.isContractRef(dep)) {
+          if (!this.tasks.has(dep)) {
+            throw new Error(
+              `Invalid task dependency: Referenced task '${dep}' does not exist in task board (strict topological order required)`
+            );
+          }
+        }
+      }
+    }
+
+    this.detectCycle(validated.id, validated.depends_on_contracts ?? []);
+
     this.tasks.set(validated.id, validated);
     this.persistToDisk();
   }
@@ -146,19 +287,8 @@ export class TaskBoardManager {
 
     // When a task is approved, auto-unblock any dependent tasks whose requirements are met
     if (status === "approved") {
-      for (const other of this.tasks.values()) {
-        if (other.status === "blocked" && other.depends_on_contracts && other.depends_on_contracts.length > 0) {
-          const allDepsMet = other.depends_on_contracts.every((dep) => {
-            if (dep.startsWith("CONTRACT/")) return true;
-            const depTask = this.tasks.get(dep);
-            return !depTask || depTask.status === "approved";
-          });
-          if (allDepsMet) {
-            other.status = "unassigned";
-            unblockedTasks.push(other);
-          }
-        }
-      }
+      const unblocked = this.evaluateUnblockedTasks();
+      unblockedTasks.push(...unblocked);
 
       // Dynamic Dialectic Evolution: If a contra round is approved, check if next round pair should spawn
       const contraMatch = taskId.match(/^round-(\d+)-contra$/i);
@@ -265,6 +395,11 @@ export class TaskBoardManager {
         for (const item of parsed) {
           const validated = TaskItemSchema.parse(item);
           this.tasks.set(validated.id, validated);
+        }
+        try {
+          this.validateGraphAcyclic();
+        } catch (err: any) {
+          console.warn(`[TaskBoardManager] Warning: Loaded task board contains cycle: ${err.message}`);
         }
       }
     } catch {
