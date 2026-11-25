@@ -16,15 +16,31 @@ export class TaskBoardManager {
   }
 
   public addTask(task: TaskItem): void {
-    const validated = TaskItemSchema.parse(task);
+    const validated = TaskItemSchema.parse({
+      ...task,
+      revision: task.revision ?? 1
+    });
     this.tasks.set(validated.id, validated);
     this.persistToDisk();
   }
 
-  public claimTask(taskId: string, nodeId: string, branch?: string, lane?: string, displayName?: string): { success: boolean; task?: TaskItem; reason?: string } {
+  public claimTask(
+    taskId: string,
+    nodeId: string,
+    branch?: string,
+    lane?: string,
+    displayName?: string,
+    expectedRevision?: number
+  ): { success: boolean; task?: TaskItem; reason?: string } {
     const task = this.tasks.get(taskId);
     if (!task) {
       return { success: false, reason: `Task ${taskId} not found` };
+    }
+    if (expectedRevision !== undefined && task.revision !== undefined && task.revision !== expectedRevision) {
+      return {
+        success: false,
+        reason: `Conflict: Stale task revision ${expectedRevision} (current: ${task.revision})`
+      };
     }
     if (lane && task.lane !== lane) {
       return {
@@ -45,13 +61,19 @@ export class TaskBoardManager {
 
     task.assigned_to = assignee;
     task.status = "active";
+    task.revision = (task.revision ?? 1) + 1;
     if (branch) task.branch = branch;
 
     this.persistToDisk();
     return { success: true, task };
   }
 
-  public updateStatus(taskId: string, status: TaskStatus, branch?: string): {
+  public updateStatus(
+    taskId: string,
+    status: TaskStatus,
+    branch?: string,
+    expectedRevision?: number
+  ): {
     success: boolean;
     task?: TaskItem;
     reason?: string;
@@ -62,8 +84,15 @@ export class TaskBoardManager {
     if (!task) {
       return { success: false, reason: `Task ${taskId} not found` };
     }
+    if (expectedRevision !== undefined && task.revision !== undefined && task.revision !== expectedRevision) {
+      return {
+        success: false,
+        reason: `Conflict: Stale task revision ${expectedRevision} (current: ${task.revision})`
+      };
+    }
 
     task.status = status;
+    task.revision = (task.revision ?? 1) + 1;
     if (status === "unassigned") {
       task.assigned_to = null;
     }

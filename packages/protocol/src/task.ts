@@ -15,6 +15,7 @@ export const TaskItemSchema = z.object({
   title: z.string().min(1),
   lane: z.string().min(1),
   status: TaskStatusSchema,
+  revision: z.number().int().positive().optional(),
   assigned_to: z.string().nullable().default(null),
   depends_on_contracts: z.array(z.string()).default([]),
   branch: z.string().optional(),
@@ -26,13 +27,15 @@ export const TaskItemSchema = z.object({
 export const TaskClaimSchema = z.object({
   task_id: z.string().min(1),
   node_id: z.string().min(1),
-  display_name: z.string().optional()
+  display_name: z.string().optional(),
+  expected_revision: z.number().int().positive().optional()
 });
 
 export const TaskStatusUpdateSchema = z.object({
   task_id: z.string().min(1),
   status: TaskStatusSchema,
-  branch: z.string().optional()
+  branch: z.string().optional(),
+  expected_revision: z.number().int().positive().optional()
 });
 
 export type TaskStatus = z.infer<typeof TaskStatusSchema>;

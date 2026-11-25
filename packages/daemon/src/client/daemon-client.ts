@@ -188,19 +188,21 @@ export class DaemonClient {
     });
   }
 
-  public claimTask(taskId: string, displayName?: string): void {
+  public claimTask(taskId: string, displayName?: string, expectedRevision?: number): void {
     this.send("task:claim", {
       task_id: taskId,
       node_id: this.options.node_id,
-      display_name: displayName
+      display_name: displayName,
+      expected_revision: expectedRevision
     });
   }
 
-  public updateTaskStatus(taskId: string, status: TaskStatus, branch?: string): void {
+  public updateTaskStatus(taskId: string, status: TaskStatus, branch?: string, expectedRevision?: number): void {
     this.send("task:status", {
       task_id: taskId,
       status,
-      branch
+      branch,
+      expected_revision: expectedRevision
     });
   }
 

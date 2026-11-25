@@ -193,4 +193,45 @@ describe("Milestone 4: Task Board Lifecycle & Disposable Worktree Critique Pipel
     wtManager.removeWorktree("task-eval-test");
     expect(fs.existsSync(wtResult.worktreePath)).toBe(false);
   });
+
+  it("should reject task updates with stale expected_revision and return task:update_failed", async () => {
+    const token = coordinator.issueInvite("backend");
+
+    const daemon = new DaemonClient({
+      url: `ws://localhost:${TEST_PORT}`,
+      node_id: "node-worker-conflict",
+      join_token: token,
+      workspace_path: CONTRIBUTOR_WS,
+      lane: "backend"
+    });
+
+    await daemon.connect();
+
+    // 1. Claim task (task starts at revision 1, claim moves it to revision 2)
+    const taskUpdatePromise = new Promise<any>((resolve) => {
+      daemon.onMessage = (type, payload) => {
+        if (type === "task:status") resolve(payload);
+      };
+    });
+
+    daemon.claimTask("task-auth-01");
+    const claimedTask = await taskUpdatePromise;
+    expect(claimedTask.revision).toBe(2);
+
+    // 2. Submit status update with STALE expected_revision: 1
+    const updateFailedPromise = new Promise<any>((resolve) => {
+      daemon.onMessage = (type, payload) => {
+        if (type === "task:update_failed") resolve(payload);
+      };
+    });
+
+    daemon.updateTaskStatus("task-auth-01", "in_review", "main", 1);
+    const failure = await updateFailedPromise;
+
+    expect(failure.task_id).toBe("task-auth-01");
+    expect(failure.reason).toContain("Conflict: Stale task revision 1 (current: 2)");
+
+    daemon.sever();
+    await new Promise((r) => setTimeout(r, 100));
+  });
 });

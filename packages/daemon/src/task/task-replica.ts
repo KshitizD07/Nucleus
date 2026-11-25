@@ -25,9 +25,16 @@ export class TaskBoardReplica {
     this.saveToDisk();
   }
 
-  public applyUpdate(task: TaskItem): void {
+  public applyUpdate(task: TaskItem): boolean {
+    const existing = this.tasks.get(task.id);
+    if (existing && existing.revision !== undefined && task.revision !== undefined) {
+      if (task.revision < existing.revision) {
+        return false; // Reject stale out-of-order update
+      }
+    }
     this.tasks.set(task.id, task);
     this.saveToDisk();
+    return true;
   }
 
   public getTask(taskId: string): TaskItem | undefined {
