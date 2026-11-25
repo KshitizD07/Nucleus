@@ -12,7 +12,14 @@ import {
   TaskStatusUpdateSchema,
   type TaskItem
 } from "@nucleus/protocol";
-import { AICriticPipeline, AutoLLMCriticProvider } from "@nucleus/critic";
+import {
+  AICriticPipeline,
+  AutoLLMCriticProvider,
+  WorktreeManager,
+  DeterministicRunner,
+  type CheckCommand,
+  SecretScanner
+} from "@nucleus/critic";
 import { NodeRegistry } from "../state/node-registry.js";
 import { LeaseMutex } from "../lock/mutex.js";
 import { EventLog } from "../state/event-log.js";
@@ -27,6 +34,9 @@ export interface CoordinatorOptions {
   logDir: string;
   contractDir?: string;
   taskDir?: string;
+  repoRoot?: string;
+  worktreesDir?: string;
+  deterministicChecks?: CheckCommand[];
   maxClients?: number;
   maxPayloadBytes?: number;
   rateLimitMsgsPerSec?: number;
@@ -50,6 +60,8 @@ export class CoordinatorServer {
   private readonly maxFileSizeBytes: number;
   private readonly messageRateMap: Map<string, { windowStart: number; count: number }>;
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private worktreeManager?: WorktreeManager;
+  private deterministicChecks?: CheckCommand[];
 
   constructor(options: CoordinatorOptions) {
     this.roomId = options.roomId;
@@ -66,6 +78,13 @@ export class CoordinatorServer {
     this.rateLimitMsgsPerSec = options.rateLimitMsgsPerSec ?? 300;
     this.maxFileSizeBytes = options.maxFileSizeBytes ?? 2 * 1024 * 1024; // 2 MB
     this.messageRateMap = new Map();
+    this.deterministicChecks = options.deterministicChecks;
+
+    if (options.repoRoot && options.worktreesDir) {
+      try {
+        this.worktreeManager = new WorktreeManager(options.repoRoot, options.worktreesDir);
+      } catch {}
+    }
     this.wss = new WebSocketServer({
       port: options.port,
       maxPayload: this.maxPayloadBytes
@@ -82,6 +101,14 @@ export class CoordinatorServer {
 
   public getContractStore(): ContractStore {
     return this.contractStore;
+  }
+
+  public setWorktreeManager(manager: WorktreeManager): void {
+    this.worktreeManager = manager;
+  }
+
+  public setDeterministicChecks(checks: CheckCommand[]): void {
+    this.deterministicChecks = checks;
   }
 
   public getMutex(): LeaseMutex {
@@ -655,13 +682,55 @@ export class CoordinatorServer {
         .join("\n\n");
     }
 
+    // Stage 1 Deterministic Checks & Credential Scanning
+    let deterministicChecksPassed = true;
+    const deterministicOutputs: string[] = [];
+
+    // Stage 1a: Disposable Worktree Deterministic Checks
+    if (task.branch && this.worktreeManager && this.deterministicChecks && this.deterministicChecks.length > 0) {
+      console.log(`[Critique Gate] Creating isolated worktree for branch '${task.branch}'...`);
+      const wtResult = this.worktreeManager.createWorktree(task.id, task.branch);
+      if (wtResult.success) {
+        try {
+          console.log(`[Critique Gate] Executing ${this.deterministicChecks.length} deterministic check(s)...`);
+          const checksResult = DeterministicRunner.runChecks(wtResult.worktreePath, this.deterministicChecks);
+          if (!checksResult.passed) {
+            deterministicChecksPassed = false;
+          }
+          for (const res of checksResult.results) {
+            deterministicOutputs.push(
+              `[${res.name}]: ${res.passed ? "PASSED" : "FAILED"} (${res.durationMs}ms)\n${res.output || res.error || ""}`
+            );
+          }
+        } finally {
+          this.worktreeManager.removeWorktree(task.id);
+        }
+      } else {
+        deterministicChecksPassed = false;
+        deterministicOutputs.push(`Worktree creation failed for branch '${task.branch}': ${wtResult.error}`);
+      }
+    }
+
+    // Stage 1b: Secret Scanner Guardrails
+    if (diffContext) {
+      const secrets = SecretScanner.scanFile(task.lane, diffContext);
+      if (secrets.length > 0) {
+        deterministicChecksPassed = false;
+        deterministicOutputs.push(
+          `Security Exception: ${secrets.length} secret(s) detected in implementation code:\n` +
+            secrets.map((s) => `  - Line ${s.line}: ${s.message}`).join("\n")
+        );
+      }
+    }
+
     try {
       const { result, markdown } = await this.criticPipeline.evaluate({
         taskId: task.id,
         lane: task.lane,
         spec: `${task.title}\n\nAgreed Contracts:\n${contractContext}`,
         diff: diffContext || "(Implementation files submitted for review)",
-        deterministicChecksPassed: true
+        deterministicChecksPassed,
+        deterministicOutputs: deterministicOutputs.length > 0 ? deterministicOutputs : undefined
       });
 
       const critiquesDir = path.join(taskStorageDir, "critiques");

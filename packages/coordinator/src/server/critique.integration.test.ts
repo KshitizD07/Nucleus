@@ -296,4 +296,68 @@ describe("Milestone 4: Task Board Lifecycle & Disposable Worktree Critique Pipel
     daemon2.sever();
     await new Promise((r) => setTimeout(r, 100));
   });
+
+  it("should run deterministic checks in worktree during review and reject tasks on check failure or secret leak", async () => {
+    const currentBranch = execSync("git rev-parse --abbrev-ref HEAD", { encoding: "utf8" }).trim();
+    const wtManager = new WorktreeManager(path.resolve("."), WORKTREES_DIR);
+    coordinator.setWorktreeManager(wtManager);
+
+    // 1. Setup deterministic check that FAILS
+    coordinator.setDeterministicChecks([
+      {
+        name: "Failing Test Gate",
+        command: "node -e \"process.exit(1)\""
+      }
+    ]);
+
+    coordinator.getTaskBoard().addTask({
+      id: "task-check-fail",
+      title: "Task with Failing Check",
+      lane: "backend",
+      status: "unassigned",
+      assigned_to: null,
+      depends_on_contracts: []
+    });
+
+    const token = coordinator.issueInvite("backend");
+    const daemon = new DaemonClient({
+      url: `ws://localhost:${TEST_PORT}`,
+      node_id: "worker-check",
+      join_token: token,
+      workspace_path: CONTRIBUTOR_WS,
+      lane: "backend"
+    });
+    await daemon.connect();
+
+    // Claim task
+    daemon.claimTask("task-check-fail");
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Submit for review with git branch
+    const reviewResultPromise = new Promise<any>((resolve) => {
+      daemon.onMessage = (type, payload: any) => {
+        if (type === "task:status" && payload.status === "changes_requested") {
+          resolve(payload);
+        }
+      };
+    });
+
+    daemon.updateTaskStatus("task-check-fail", "in_review", currentBranch);
+    const rejectedTask = await reviewResultPromise;
+
+    // Must transition to changes_requested because deterministic check failed!
+    expect(rejectedTask.status).toBe("changes_requested");
+    expect(coordinator.getTaskBoard().getTask("task-check-fail")?.status).toBe("changes_requested");
+
+    // Verify critique markdown report records deterministic check failure
+    const critiquePath = path.join(LOG_DIR, "critiques", "task-check-fail.md");
+    expect(fs.existsSync(critiquePath)).toBe(true);
+    const critiqueReport = fs.readFileSync(critiquePath, "utf8");
+    expect(critiqueReport).toContain("CHANGES_REQUESTED");
+    expect(critiqueReport).toContain("**Deterministic Checks:** FAILED");
+    expect(critiqueReport).toContain("[Failing Test Gate]: FAILED");
+
+    daemon.sever();
+    await new Promise((r) => setTimeout(r, 100));
+  });
 });

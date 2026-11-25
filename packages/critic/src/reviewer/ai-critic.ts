@@ -93,6 +93,17 @@ export class AICriticPipeline {
     // Stage 1 deterministic check status
     let deterministicPassed = context.deterministicChecksPassed;
 
+    if (!deterministicPassed && context.deterministicOutputs && context.deterministicOutputs.length > 0) {
+      for (const output of context.deterministicOutputs) {
+        findings.push({
+          severity: "critical",
+          file: "(deterministic-checks)",
+          message: output,
+          suggested_fix: "Fix failing build, test, or lint commands so all deterministic checks exit 0."
+        });
+      }
+    }
+
     // Run secret scanner on diff directly
     const secrets = SecretScanner.scanFile("diff", context.diff);
     if (secrets.length > 0) {
