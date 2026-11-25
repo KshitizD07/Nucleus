@@ -53,14 +53,39 @@ describe("Coordinator <-> Daemon Integration: Join Handshake", () => {
       node_id: "bad-node",
       join_token: "invalid-token-xyz",
       workspace_path: "/test/workspace",
-      lane: "frontend"
+      lane: "frontend",
+      autoReconnect: false
     });
 
     const reason = await new Promise<string>((resolve) => {
       daemon.onDisconnect = resolve;
-      daemon.connect();
+      daemon.connect().catch(() => {});
     });
 
     expect(reason).toBeTruthy();
+    daemon.sever();
+  });
+
+  it("should reject a connection when client lane does not match invite token lane", async () => {
+    // Token issued for 'backend' lane
+    const token = coordinator.issueInvite("backend");
+
+    // Client maliciously or mistakenly attempts to join as 'frontend'
+    const daemon = new DaemonClient({
+      url: `ws://localhost:${TEST_PORT}`,
+      node_id: "spoofed-lane-node",
+      join_token: token,
+      workspace_path: "/test/workspace",
+      lane: "frontend",
+      autoReconnect: false
+    });
+
+    const reason = await new Promise<string>((resolve) => {
+      daemon.onDisconnect = resolve;
+      daemon.connect().catch(() => {});
+    });
+
+    expect(reason).toContain("Lane mismatch");
+    daemon.sever();
   });
 });

@@ -100,6 +100,14 @@ export class CoordinatorServer {
           return;
         }
 
+        // Enforce invite lane authentication (Issue 3 fix)
+        if (hello.lane && hello.lane !== invite.lane) {
+          ws.close(4003, `Lane mismatch: Invite token issued for lane '${invite.lane}', but client requested '${hello.lane}'`);
+          return;
+        }
+
+        const authoritativeLane = invite.lane;
+
         const node_id = hello.node_id;
         const existingWs = this.sockets.get(node_id);
         if (existingWs && existingWs !== ws) {
@@ -114,13 +122,13 @@ export class CoordinatorServer {
         if (!existingNode) {
           this.registry.register({
             node_id,
-            lane: hello.lane,
+            lane: authoritativeLane,
             status: "idle",
             task_id: null,
             contract_version: 0,
             active_file: null
           });
-          this.eventLog.append("node_joined", { node_id, lane: hello.lane });
+          this.eventLog.append("node_joined", { node_id, lane: authoritativeLane });
         } else {
           this.registry.updateHeartbeat(node_id, { status: "idle" });
         }
@@ -154,7 +162,7 @@ export class CoordinatorServer {
           this.broadcast(
             buildMessage(this.roomId, "coordinator", "session:peer_joined", {
               node_id,
-              lane: hello.lane
+              lane: authoritativeLane
             }),
             node_id
           );
@@ -163,7 +171,7 @@ export class CoordinatorServer {
         ws.on("message", (data) => this.handleMessage(node_id, ws, data.toString()));
         ws.on("close", () => this.handleDisconnect(node_id));
 
-        console.log(`[Coordinator] Node ${existingNode ? "reconnected" : "joined"}: ${node_id} (lane: ${hello.lane})`);
+        console.log(`[Coordinator] Node ${existingNode ? "reconnected" : "joined"}: ${node_id} (lane: ${authoritativeLane})`);
       } catch (err) {
         ws.close(4000, "Invalid handshake");
       }
