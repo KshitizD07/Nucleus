@@ -27,6 +27,10 @@ export interface CoordinatorOptions {
   logDir: string;
   contractDir?: string;
   taskDir?: string;
+  maxClients?: number;
+  maxPayloadBytes?: number;
+  rateLimitMsgsPerSec?: number;
+  maxFileSizeBytes?: number;
 }
 
 export class CoordinatorServer {
@@ -40,6 +44,11 @@ export class CoordinatorServer {
   private readonly sockets: Map<string, WebSocket>;
   private readonly roomId: string;
   private readonly criticPipeline: AICriticPipeline;
+  private readonly maxClients: number;
+  private readonly maxPayloadBytes: number;
+  private readonly rateLimitMsgsPerSec: number;
+  private readonly maxFileSizeBytes: number;
+  private readonly messageRateMap: Map<string, { windowStart: number; count: number }>;
   private heartbeatTimer: NodeJS.Timeout | null = null;
 
   constructor(options: CoordinatorOptions) {
@@ -52,7 +61,15 @@ export class CoordinatorServer {
     this.taskBoard = new TaskBoardManager(options.taskDir ?? options.logDir);
     this.criticPipeline = new AICriticPipeline(new AutoLLMCriticProvider());
     this.sockets = new Map();
-    this.wss = new WebSocketServer({ port: options.port });
+    this.maxClients = options.maxClients ?? 32;
+    this.maxPayloadBytes = options.maxPayloadBytes ?? 5 * 1024 * 1024; // 5 MB
+    this.rateLimitMsgsPerSec = options.rateLimitMsgsPerSec ?? 300;
+    this.maxFileSizeBytes = options.maxFileSizeBytes ?? 2 * 1024 * 1024; // 2 MB
+    this.messageRateMap = new Map();
+    this.wss = new WebSocketServer({
+      port: options.port,
+      maxPayload: this.maxPayloadBytes
+    });
   }
 
   public issueInvite(lane: string): string {
@@ -109,6 +126,13 @@ export class CoordinatorServer {
         const authoritativeLane = invite.lane;
 
         const node_id = hello.node_id;
+
+        // Quota check: max concurrent clients per room (Issue 10 fix)
+        if (this.sockets.size >= this.maxClients && !this.sockets.has(node_id)) {
+          ws.close(4029, "Room capacity full");
+          return;
+        }
+
         const existingWs = this.sockets.get(node_id);
         if (existingWs && existingWs !== ws) {
           try {
@@ -180,6 +204,20 @@ export class CoordinatorServer {
 
   private handleMessage(node_id: string, ws: WebSocket, raw: string): void {
     try {
+      // Per-socket sliding window rate limiting (Issue 10 fix)
+      const now = Date.now();
+      let rate = this.messageRateMap.get(node_id);
+      if (!rate || now - rate.windowStart >= 1000) {
+        rate = { windowStart: now, count: 1 };
+        this.messageRateMap.set(node_id, rate);
+      } else {
+        rate.count++;
+        if (rate.count > this.rateLimitMsgsPerSec) {
+          console.warn(`[Coordinator] Rate limit exceeded for node ${node_id} (${rate.count} msgs/sec > ${this.rateLimitMsgsPerSec}). Dropping message.`);
+          return;
+        }
+      }
+
       const envelope = MessageEnvelopeSchema.parse(JSON.parse(raw));
 
       if (envelope.type === "session:heartbeat") {
@@ -245,6 +283,11 @@ export class CoordinatorServer {
 
         try {
           const sync = envelope.payload as { source_lane: string; file_path: string; content: string; version: number };
+          if (sync.content && sync.content.length > this.maxFileSizeBytes) {
+            console.warn(`[Coordinator] Dropped oversized shadow sync (${sync.content.length} bytes > ${this.maxFileSizeBytes}) from ${node_id}`);
+            return;
+          }
+
           const taskStorageDir = path.dirname(this.taskBoard.getStoragePath());
           const shadowLaneDir = path.resolve(taskStorageDir, "shadows", authoritativeLane);
           const shadowFile = path.resolve(shadowLaneDir, sync.file_path);
@@ -344,6 +387,10 @@ export class CoordinatorServer {
   private handleContractUpdate(node_id: string, payload: unknown): void {
     const update = ContractUpdateRequestSchema.parse(payload);
     if (!this.contractStore.isValidPath(update.file_path)) return;
+    if (update.content && update.content.length > this.maxFileSizeBytes) {
+      console.warn(`[Coordinator] Dropped oversized contract update (${update.content.length} bytes > ${this.maxFileSizeBytes}) from ${node_id}`);
+      return;
+    }
 
     // Only the lock holder may publish an update
     const lock = this.mutex.getLock(update.file_path);
@@ -541,6 +588,7 @@ export class CoordinatorServer {
   }
 
   private handleDisconnect(node_id: string): void {
+    this.messageRateMap.delete(node_id);
     this.registry.remove(node_id);
     this.sockets.delete(node_id);
     this.eventLog.append("node_severed", { node_id, reason: "disconnect" });
@@ -559,6 +607,7 @@ export class CoordinatorServer {
   private evictStaleNodes(): void {
     const evicted = this.registry.evictStale(20_000);
     for (const node_id of evicted) {
+      this.messageRateMap.delete(node_id);
       const ws = this.sockets.get(node_id);
       if (ws) {
         ws.terminate();

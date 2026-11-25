@@ -417,5 +417,49 @@ describe("Nucleus Comprehensive System Audit: Functionality, Efficiency & Securi
       const onDisk = mirror.readShadowFile("backend", "src/api.ts");
       expect(onDisk).toBe("console.log('v2');");
     });
+
+    it("should enforce room client capacity quota and reject excess connections with 4029", async () => {
+      const quotaPort = 9089;
+      const quotaServer = new CoordinatorServer({
+        port: quotaPort,
+        roomId: "quota-room",
+        logDir: path.join(tempBase, "quota_logs"),
+        maxClients: 1 // Only allow 1 connection
+      });
+      quotaServer.start();
+
+      const token1 = quotaServer.issueInvite("backend");
+      const client1 = new DaemonClient({
+        url: `ws://localhost:${quotaPort}`,
+        node_id: "client-1",
+        lane: "backend",
+        join_token: token1,
+        workspace_path: tempBase,
+        autoReconnect: false
+      });
+      await client1.connect();
+
+      // Client 2 attempts to connect when room capacity is 1 -> rejected with 4029
+      const token2 = quotaServer.issueInvite("frontend");
+      const client2 = new DaemonClient({
+        url: `ws://localhost:${quotaPort}`,
+        node_id: "client-2",
+        lane: "frontend",
+        join_token: token2,
+        workspace_path: tempBase,
+        autoReconnect: false
+      });
+
+      const disconnectPromise = new Promise<{ reason: string }>((resolve) => {
+        client2.onDisconnect = (reason) => resolve({ reason });
+      });
+
+      client2.connect().catch(() => {});
+      const res = await disconnectPromise;
+      expect(res.reason).toContain("Room capacity full");
+
+      client1.sever();
+      quotaServer.stop();
+    });
   });
 });
