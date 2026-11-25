@@ -15,6 +15,11 @@ describe("WorkspaceJail (Security Boundary)", () => {
     expect(() => jail.resolveSafe("../secrets.env")).toThrow(/Security Exception/);
   });
 
+  it("should reject sibling directory paths sharing the workspace prefix", () => {
+    expect(() => jail.resolveSafe("../test_workspace_secret/credentials.json")).toThrow(/Security Exception/);
+    expect(() => jail.resolveSafe("../test_workspace-data/config")).toThrow(/Security Exception/);
+  });
+
   it("should reject absolute paths outside the workspace root", () => {
     const malicious = path.resolve("/etc/passwd");
     expect(() => jail.resolveSafe(malicious)).toThrow(/Security Exception/);
