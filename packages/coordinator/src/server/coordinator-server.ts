@@ -232,9 +232,23 @@ export class CoordinatorServer {
         try {
           const sync = envelope.payload as { source_lane: string; file_path: string; content: string; version: number };
           const taskStorageDir = path.dirname(this.taskBoard.getStoragePath());
-          const shadowFile = path.join(taskStorageDir, "shadows", sync.source_lane, sync.file_path);
+          const shadowLaneDir = path.resolve(taskStorageDir, "shadows", sync.source_lane);
+          const shadowFile = path.resolve(shadowLaneDir, sync.file_path);
+
+          // Path containment check on incoming shadow files
+          const rel = path.relative(shadowLaneDir, shadowFile);
+          const laneWithSep = shadowLaneDir.endsWith(path.sep) ? shadowLaneDir : shadowLaneDir + path.sep;
+          if (rel.startsWith("..") || path.isAbsolute(rel) || (!shadowFile.startsWith(laneWithSep) && shadowFile !== shadowLaneDir)) {
+            return; // Reject traversal attempt
+          }
+
           fs.mkdirSync(path.dirname(shadowFile), { recursive: true });
-          fs.writeFileSync(shadowFile, sync.content, "utf8");
+          const tmpFile = path.join(
+            path.dirname(shadowFile),
+            `.${path.basename(shadowFile)}.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`
+          );
+          fs.writeFileSync(tmpFile, sync.content, "utf8");
+          fs.renameSync(tmpFile, shadowFile);
         } catch {
           // Ignore transient write errors
         }
@@ -249,6 +263,16 @@ export class CoordinatorServer {
 
   private handleContractLockRequest(node_id: string, ws: WebSocket, payload: unknown): void {
     const req = ContractLockRequestSchema.parse(payload);
+
+    if (!this.contractStore.isValidPath(req.file_path)) {
+      ws.send(JSON.stringify(buildMessage(this.roomId, "coordinator", "contract:lock_denied", {
+        file_path: req.file_path,
+        held_by: "system:invalid_path",
+        expires_at: 0
+      })));
+      return;
+    }
+
     const granted = this.mutex.acquire(req.file_path, node_id, req.ttl_seconds);
 
     if (granted) {
@@ -270,12 +294,15 @@ export class CoordinatorServer {
 
   private handleContractLockRelease(node_id: string, payload: unknown): void {
     const req = ContractLockReleaseSchema.parse(payload);
+    if (!this.contractStore.isValidPath(req.file_path)) return;
+
     this.mutex.release(req.file_path, node_id);
     this.eventLog.append("contract_lock_released", { file_path: req.file_path, holder: node_id });
   }
 
   private handleContractUpdate(node_id: string, payload: unknown): void {
     const update = ContractUpdateRequestSchema.parse(payload);
+    if (!this.contractStore.isValidPath(update.file_path)) return;
 
     // Only the lock holder may publish an update
     const lock = this.mutex.getLock(update.file_path);

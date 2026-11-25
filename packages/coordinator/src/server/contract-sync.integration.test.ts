@@ -144,4 +144,41 @@ describe("Milestone 2: Contract Synchronization & Lease Locks", () => {
     daemon2.sever();
     await new Promise((r) => setTimeout(r, 100));
   });
+
+  it("should reject contract lock requests and updates attempting path traversal outside contract directory", async () => {
+    const token = coordinator.issueInvite("backend");
+
+    const daemon = new DaemonClient({
+      url: `ws://localhost:${TEST_PORT}`,
+      node_id: "node-attacker",
+      join_token: token,
+      workspace_path: DAEMON_WORKSPACE,
+      lane: "backend"
+    });
+
+    await daemon.connect();
+
+    const denyPromise = new Promise<any>((resolve) => {
+      daemon.onMessage = (type, payload) => {
+        if (type === "contract:lock_denied") resolve(payload);
+      };
+    });
+
+    // Attempt to acquire lock on path traversal
+    daemon.requestContractLock("../../package.json", 15);
+    const denial = await denyPromise;
+    expect(denial.file_path).toBe("../../package.json");
+    expect(denial.held_by).toBe("system:invalid_path");
+
+    // Direct contract store path traversal check
+    expect(() => coordinator.getContractStore().update("../../secret.env", "hacked=true")).toThrow(
+      /Security Exception.*Contract path traversal/
+    );
+
+    // Verify file was never written outside
+    expect(fs.existsSync(path.resolve(COORD_CONTRACT_DIR, "../../secret.env"))).toBe(false);
+
+    daemon.sever();
+    await new Promise((r) => setTimeout(r, 100));
+  });
 });
