@@ -162,7 +162,9 @@ export class JoinRunner {
       onDiffStream: (diff) => {
         this.client?.streamDiff(diff);
         if (diff.diff_hunk && diff.active_file) {
-          this.client?.syncLaneShadow(lane, diff.active_file, diff.diff_hunk, Date.now());
+          if (!diff.diff_hunk.includes("[POTENTIAL SECRET DETECTED")) {
+            this.client?.syncLaneShadow(lane, diff.active_file, diff.diff_hunk, Date.now());
+          }
         }
       },
       onFocusChange: (filePath, action) => {

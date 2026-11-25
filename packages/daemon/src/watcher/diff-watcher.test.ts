@@ -75,4 +75,65 @@ describe("WorkspaceDiffWatcher Hardened Ignore & Binary Filter", () => {
     const binaryBuffer = Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x00, 0x00]); // ELF header with nulls
     expect(watcher.isBinaryContent(binaryBuffer)).toBe(true);
   });
+
+  it("should ignore and block sensitive credential files from diff watching", () => {
+    const watcher = new WorkspaceDiffWatcher({
+      workspaceRoot: tempDir,
+      lane: "backend",
+      onDiffStream: () => {},
+      onFocusChange: () => {}
+    });
+
+    // Sensitive files are automatically ignored
+    expect(watcher.isSensitiveFile(".env")).toBe(true);
+    expect(watcher.isSensitiveFile(".env.local")).toBe(true);
+    expect(watcher.isSensitiveFile(".env.production")).toBe(true);
+    expect(watcher.isSensitiveFile(".npmrc")).toBe(true);
+    expect(watcher.isSensitiveFile(".pypirc")).toBe(true);
+    expect(watcher.isSensitiveFile("id_rsa")).toBe(true);
+    expect(watcher.isSensitiveFile("id_ed25519")).toBe(true);
+    expect(watcher.isSensitiveFile("credentials.json")).toBe(true);
+    expect(watcher.isSensitiveFile("server.key")).toBe(true);
+    expect(watcher.isSensitiveFile("cert.pem")).toBe(true);
+
+    // Also verify via isIgnored()
+    expect(watcher.isIgnored(".env")).toBe(true);
+    expect(watcher.isIgnored("config/.env.test")).toBe(true);
+    expect(watcher.isIgnored("secrets/id_rsa")).toBe(true);
+
+    // Normal files not marked sensitive
+    expect(watcher.isSensitiveFile("src/index.ts")).toBe(false);
+    expect(watcher.isSensitiveFile("CONTRACT/api.md")).toBe(false);
+  });
+
+  it("should detect hardcoded secrets and suppress outbound diff_hunk", async () => {
+    let capturedDiff: any = null;
+
+    const watcher = new WorkspaceDiffWatcher({
+      workspaceRoot: tempDir,
+      lane: "backend",
+      debounceMs: 50,
+      onDiffStream: (diff) => {
+        capturedDiff = diff;
+      },
+      onFocusChange: () => {}
+    });
+
+    watcher.start();
+
+    // Create a file containing an AWS secret key
+    const testFile = path.join(tempDir, "leak.ts");
+    fs.writeFileSync(testFile, 'const AWS_KEY = "AKIA1234567890ABCDEF";\nconsole.log(AWS_KEY);', "utf8");
+
+    // Allow watcher debounce to process
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(capturedDiff).not.toBeNull();
+    expect(capturedDiff.active_file).toBe("leak.ts");
+    // Raw AWS key must NOT be transmitted in diff_hunk
+    expect(capturedDiff.diff_hunk).not.toContain("AKIA1234567890ABCDEF");
+    expect(capturedDiff.diff_hunk).toContain("[POTENTIAL SECRET DETECTED: AWS Access Key ID — DIFF STREAM SUPPRESSED BY DAEMON GUARDRAILS]");
+
+    watcher.stop();
+  });
 });

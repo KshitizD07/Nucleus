@@ -16,6 +16,38 @@ export const GLOBAL_NON_BYPASSABLE_IGNORES: readonly string[] = [
   "out"
 ];
 
+export const SENSITIVE_FILENAME_PATTERNS: readonly RegExp[] = [
+  /^\.env(\..+)?$/i,
+  /^\.npmrc$/i,
+  /^\.pypirc$/i,
+  /^id_(rsa|ed25519|ecdsa|dsa)(\.pub)?$/i,
+  /^credentials.*\.json$/i,
+  /^service-account.*\.json$/i
+];
+
+export const SENSITIVE_EXTENSIONS: ReadonlySet<string> = new Set([
+  ".pem", ".key", ".pfx", ".p12", ".pkcs12", ".crt", ".cer", ".der"
+]);
+
+export const OUTBOUND_SECRET_PATTERNS: readonly { name: string; regex: RegExp }[] = [
+  {
+    name: "Private Key Header",
+    regex: /-----BEGIN (RSA|EC|DSA|OPENSSH)?\s?PRIVATE KEY-----/i
+  },
+  {
+    name: "AWS Access Key ID",
+    regex: /\b(AKIA|ABIA|ACCA|ASIA)[0-9A-Z]{16}\b/
+  },
+  {
+    name: "Stripe Secret Key",
+    regex: /\b(sk_live_[0-9a-zA-Z]{24,})\b/
+  },
+  {
+    name: "Generic Secret / Token Assignment",
+    regex: /(api_key|apikey|secret|password|passwd|private_key)\s*[:=]\s*["'][a-zA-Z0-9_\-.~!@#$%^&*+=]{8,}["']/i
+  }
+];
+
 export const BINARY_EXTENSIONS: ReadonlySet<string> = new Set([
   ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".svg",
   ".pdf", ".zip", ".tar", ".gz", ".7z", ".rar",
@@ -103,8 +135,33 @@ export class WorkspaceDiffWatcher {
     }
   }
 
+  public isSensitiveFile(filePath: string): boolean {
+    const base = path.basename(filePath).toLowerCase();
+    const ext = path.extname(filePath).toLowerCase();
+
+    if (SENSITIVE_EXTENSIONS.has(ext)) return true;
+
+    for (const pattern of SENSITIVE_FILENAME_PATTERNS) {
+      if (pattern.test(base)) return true;
+    }
+
+    return false;
+  }
+
+  public detectSecret(content: string): string | null {
+    for (const pattern of OUTBOUND_SECRET_PATTERNS) {
+      if (pattern.regex.test(content)) {
+        return pattern.name;
+      }
+    }
+    return null;
+  }
+
   public isIgnored(filePath: string): boolean {
     const normalized = filePath.replace(/\\/g, "/").replace(/^\/+/, "");
+    if (this.isSensitiveFile(normalized)) {
+      return true;
+    }
     for (const pattern of this.ignoredPatterns) {
       if (normalized === pattern || normalized.startsWith(pattern + "/")) {
         return true;
@@ -136,7 +193,7 @@ export class WorkspaceDiffWatcher {
 
   private handleFileChange(relativeFilePath: string): void {
     try {
-      if (this.isIgnored(relativeFilePath) || this.isBinaryFile(relativeFilePath)) return;
+      if (this.isIgnored(relativeFilePath) || this.isBinaryFile(relativeFilePath) || this.isSensitiveFile(relativeFilePath)) return;
 
       const fullPath = this.jail.resolveSafe(relativeFilePath);
       if (!fs.existsSync(fullPath)) return;
@@ -153,6 +210,21 @@ export class WorkspaceDiffWatcher {
       this.fileSnapshots.set(relativeFilePath, newContent);
 
       this.onFocusChange(relativeFilePath, "saved");
+
+      // Guardrail: check for credentials/secrets before streaming outbound
+      const detectedSecret = this.detectSecret(newContent);
+      if (detectedSecret) {
+        console.warn(`[DiffWatcher] ⚠️ Credential guardrail triggered on ${relativeFilePath} (${detectedSecret}). Suppressing outbound diff stream.`);
+        const diffStream: LiveDiffStream = {
+          lane: this.lane,
+          active_file: relativeFilePath,
+          files_changed: [relativeFilePath],
+          patch_summary: `[Secret Guardrail: ${detectedSecret} detected in ${path.basename(relativeFilePath)}]`,
+          diff_hunk: `[POTENTIAL SECRET DETECTED: ${detectedSecret} — DIFF STREAM SUPPRESSED BY DAEMON GUARDRAILS]`
+        };
+        this.onDiffStream(diffStream);
+        return;
+      }
 
       // Calculate simple line diff summary
       const oldLines = oldContent ? oldContent.split("\n").length : 0;
