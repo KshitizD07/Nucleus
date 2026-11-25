@@ -240,4 +240,75 @@ describe("WorkspaceDiffWatcher Hardened Ignore & Binary Filter", () => {
 
     watcher.stop();
   });
+
+  it("should perform initial workspace scan on start and sync pre-existing files", async () => {
+    // 1. Pre-create existing files in workspace before starting watcher
+    const preExistingFile = path.join(tempDir, "src", "existing.ts");
+    fs.mkdirSync(path.dirname(preExistingFile), { recursive: true });
+    fs.writeFileSync(preExistingFile, "const a = 1;\nconst b = 2;\n", "utf8");
+
+    // Also create an ignored file and a sensitive file to verify exclusion
+    const nodeModulesFile = path.join(tempDir, "node_modules", "pkg", "index.js");
+    fs.mkdirSync(path.dirname(nodeModulesFile), { recursive: true });
+    fs.writeFileSync(nodeModulesFile, "module.exports = {};", "utf8");
+
+    const envFile = path.join(tempDir, ".env");
+    fs.writeFileSync(envFile, "SECRET=123", "utf8");
+
+    const syncedFiles: Record<string, string> = {};
+    let diffStreamCalled = false;
+
+    const watcher = new WorkspaceDiffWatcher({
+      workspaceRoot: tempDir,
+      lane: "backend",
+      debounceMs: 50,
+      onDiffStream: () => {
+        diffStreamCalled = true;
+      },
+      onShadowSync: (filePath, content) => {
+        syncedFiles[filePath] = content;
+      },
+      onFocusChange: () => {}
+    });
+
+    watcher.start();
+
+    // Verify initial scan results:
+    // - Pre-existing file was scanned and synced into shadow
+    expect(syncedFiles["src/existing.ts"]).toBe("const a = 1;\nconst b = 2;\n");
+    // - fileSnapshots was populated
+    expect(watcher.getSnapshot("src/existing.ts")).toBe("const a = 1;\nconst b = 2;\n");
+    // - Ignored & sensitive files were skipped
+    expect(syncedFiles["node_modules/pkg/index.js"]).toBeUndefined();
+    expect(syncedFiles[".env"]).toBeUndefined();
+    // - No diff stream event spammed for unchanged files
+    expect(diffStreamCalled).toBe(false);
+
+    // 2. Now modify the pre-existing file: it should produce a REAL line diff, not an initial addition
+    let capturedDiff: any = null;
+    const watcher2 = new WorkspaceDiffWatcher({
+      workspaceRoot: tempDir,
+      lane: "backend",
+      debounceMs: 50,
+      onDiffStream: (diff) => {
+        capturedDiff = diff;
+      },
+      onFocusChange: () => {}
+    });
+    // Start watcher2 (which will scan and snapshot existing.ts)
+    watcher2.start();
+
+    fs.writeFileSync(preExistingFile, "const a = 1;\nconst b = 999;\n", "utf8");
+    await new Promise((r) => setTimeout(r, 200));
+
+    expect(capturedDiff).not.toBeNull();
+    expect(capturedDiff.diff_hunk).toContain("--- a/src/existing.ts");
+    expect(capturedDiff.diff_hunk).toContain("+++ b/src/existing.ts");
+    expect(capturedDiff.diff_hunk).toContain("-const b = 2;");
+    expect(capturedDiff.diff_hunk).toContain("+const b = 999;");
+    expect(capturedDiff.diff_hunk).toContain(" const a = 1;"); // Context preserved!
+
+    watcher.stop();
+    watcher2.stop();
+  });
 });

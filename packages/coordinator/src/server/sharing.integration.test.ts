@@ -301,4 +301,48 @@ describe("Milestone 3: Live Diff Streaming, Shadows & Agent Context (.nucleus/PE
     daemonFE.sever();
     await new Promise((r) => setTimeout(r, 100));
   });
+
+  it("should send catch-up shadow files from other lanes to a newly joined node", async () => {
+    // 1. BE node connects and syncs a file to coordinator
+    const tokenBE = coordinator.issueInvite("backend");
+    const daemonBE = new DaemonClient({
+      url: `ws://localhost:${TEST_PORT}`,
+      node_id: "node-be-early",
+      join_token: tokenBE,
+      workspace_path: BE_WORKSPACE,
+      lane: "backend"
+    });
+
+    await daemonBE.connect();
+    daemonBE.syncLaneShadow("backend", "src/shared.ts", "export const shared = 'data';", 1);
+    await new Promise((r) => setTimeout(r, 150));
+
+    // 2. Later, FE node joins. It should automatically receive the BE shadow file!
+    const tokenFE = coordinator.issueInvite("frontend");
+    const feShadowMirror = new ShadowMirror(FE_WORKSPACE);
+
+    const daemonFE = new DaemonClient({
+      url: `ws://localhost:${TEST_PORT}`,
+      node_id: "node-fe-late",
+      join_token: tokenFE,
+      workspace_path: FE_WORKSPACE,
+      lane: "frontend"
+    });
+
+    daemonFE.onMessage = (type, payload: any) => {
+      if (type === "sharing:lane_shadow_sync") {
+        feShadowMirror.applySync(payload);
+      }
+    };
+
+    await daemonFE.connect();
+    await new Promise((r) => setTimeout(r, 150));
+
+    // FE node received BE's pre-existing shadow file as catch-up!
+    expect(feShadowMirror.readShadowFile("backend", "src/shared.ts")).toBe("export const shared = 'data';");
+
+    daemonBE.sever();
+    daemonFE.sever();
+    await new Promise((r) => setTimeout(r, 100));
+  });
 });

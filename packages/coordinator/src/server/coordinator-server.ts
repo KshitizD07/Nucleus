@@ -182,6 +182,49 @@ export class CoordinatorServer {
 
         ws.send(JSON.stringify(snapshot));
 
+        // Catch-up: send existing peer lane shadow files to the newly joined node (Issue 15)
+        try {
+          const taskStorageDir = path.dirname(this.taskBoard.getStoragePath());
+          const shadowsBaseDir = path.join(taskStorageDir, "shadows");
+          if (fs.existsSync(shadowsBaseDir)) {
+            const laneDirs = fs.readdirSync(shadowsBaseDir);
+            for (const otherLane of laneDirs) {
+              if (otherLane === authoritativeLane) continue;
+              const fullLaneDir = path.join(shadowsBaseDir, otherLane);
+              if (!fs.statSync(fullLaneDir).isDirectory()) continue;
+
+              const walkLaneFiles = (dir: string): string[] => {
+                const results: string[] = [];
+                for (const entry of fs.readdirSync(dir)) {
+                  const full = path.join(dir, entry);
+                  const stat = fs.statSync(full);
+                  if (stat.isDirectory()) {
+                    results.push(...walkLaneFiles(full));
+                  } else if (stat.isFile()) {
+                    results.push(full);
+                  }
+                }
+                return results;
+              };
+
+              const laneFiles = walkLaneFiles(fullLaneDir);
+              for (const filePath of laneFiles) {
+                const relativePath = path.relative(fullLaneDir, filePath).replace(/\\/g, "/");
+                const content = fs.readFileSync(filePath, "utf8");
+                const syncMsg = buildMessage(this.roomId, "coordinator", "sharing:lane_shadow_sync", {
+                  source_lane: otherLane,
+                  file_path: relativePath,
+                  content,
+                  version: 1
+                });
+                ws.send(JSON.stringify(syncMsg));
+              }
+            }
+          }
+        } catch (shadowErr) {
+          console.warn(`[Coordinator] Failed to stream catch-up shadows to ${node_id}:`, shadowErr);
+        }
+
         if (!existingNode) {
           this.broadcast(
             buildMessage(this.roomId, "coordinator", "session:peer_joined", {

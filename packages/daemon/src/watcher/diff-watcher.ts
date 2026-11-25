@@ -63,6 +63,7 @@ export interface WorkspaceDiffWatcherOptions {
   lane: string;
   ignoredPatterns?: string[];
   debounceMs?: number;
+  skipInitialScan?: boolean;
   onDiffStream: (diff: LiveDiffStream) => void;
   onFocusChange: (filePath: string, action: "editing" | "idle" | "saved") => void;
   onShadowSync?: (filePath: string, content: string) => void;
@@ -75,6 +76,7 @@ export class WorkspaceDiffWatcher {
   private readonly lane: string;
   private readonly ignoredPatterns: string[];
   private readonly debounceMs: number;
+  private readonly skipInitialScan: boolean;
   private readonly onDiffStream: (diff: LiveDiffStream) => void;
   private readonly onFocusChange: (filePath: string, action: "editing" | "idle" | "saved") => void;
   private readonly onShadowSync?: (filePath: string, content: string) => void;
@@ -91,14 +93,82 @@ export class WorkspaceDiffWatcher {
     const combined = new Set([...GLOBAL_NON_BYPASSABLE_IGNORES, ...userPatterns]);
     this.ignoredPatterns = Array.from(combined);
     this.debounceMs = options.debounceMs ?? 300;
+    this.skipInitialScan = options.skipInitialScan ?? false;
     this.onDiffStream = options.onDiffStream;
     this.onFocusChange = options.onFocusChange;
     this.onShadowSync = options.onShadowSync;
     this.onShadowDelete = options.onShadowDelete;
   }
 
+  public getSnapshot(filePath: string): string | undefined {
+    return this.fileSnapshots.get(filePath);
+  }
+
+  public getTrackedFiles(): string[] {
+    return Array.from(this.fileSnapshots.keys());
+  }
+
+  public scanInitialWorkspace(): void {
+    if (!fs.existsSync(this.workspaceRoot)) return;
+
+    const walk = (dir: string): void => {
+      let entries: fs.Dirent[] = [];
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        const relPath = path.relative(this.workspaceRoot, fullPath).replace(/\\/g, "/");
+
+        if (this.isIgnored(relPath)) {
+          continue;
+        }
+
+        if (entry.isDirectory()) {
+          walk(fullPath);
+        } else if (entry.isFile()) {
+          if (this.isBinaryFile(relPath) || this.isSensitiveFile(relPath)) {
+            continue;
+          }
+
+          try {
+            const stat = fs.statSync(fullPath);
+            if (stat.size > 2 * 1024 * 1024) {
+              continue;
+            }
+
+            const buffer = fs.readFileSync(fullPath);
+            if (this.isBinaryContent(buffer)) {
+              continue;
+            }
+
+            const content = buffer.toString("utf8");
+            const detectedSecret = this.detectSecret(content);
+            if (detectedSecret) {
+              console.warn(`[DiffWatcher] ⚠️ Secret guardrail triggered on initial scan of ${relPath} (${detectedSecret}). Skipping initial shadow sync.`);
+              continue;
+            }
+
+            this.fileSnapshots.set(relPath, content);
+            this.onShadowSync?.(relPath, content);
+          } catch {
+            // Ignore transient read errors
+          }
+        }
+      }
+    };
+
+    walk(this.workspaceRoot);
+  }
+
   public start(): void {
     if (this.watcher) return;
+    if (!this.skipInitialScan) {
+      this.scanInitialWorkspace();
+    }
     try {
       this.watcher = fs.watch(this.workspaceRoot, { recursive: true }, (eventType, relativeFilename) => {
         if (!relativeFilename) return;
