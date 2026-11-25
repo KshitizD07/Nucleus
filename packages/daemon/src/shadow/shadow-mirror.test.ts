@@ -86,4 +86,39 @@ describe("ShadowMirror (Sync and Deletion)", () => {
     expect(deleted).toBe(false);
     expect(mirror.readShadowFile("frontend", "index.ts")).toBe("v3");
   });
+
+  it("should persist version manifest across restarts and reject stale syncs after re-instantiation", () => {
+    const mirror1 = new ShadowMirror(tempDir);
+    mirror1.applySync({
+      source_lane: "backend",
+      file_path: "api/routes.ts",
+      content: "version 5 code",
+      version: 5
+    });
+
+    // Simulate daemon restart by instantiating a fresh ShadowMirror
+    const mirror2 = new ShadowMirror(tempDir);
+
+    // Stale sync v4 must be rejected because v5 was persisted!
+    const staleRes = mirror2.applySync({
+      source_lane: "backend",
+      file_path: "api/routes.ts",
+      content: "version 4 code",
+      version: 4
+    });
+
+    expect(staleRes.applied).toBe(false);
+    expect(mirror2.readShadowFile("backend", "api/routes.ts")).toBe("version 5 code");
+
+    // Newer sync v6 must be accepted
+    const freshRes = mirror2.applySync({
+      source_lane: "backend",
+      file_path: "api/routes.ts",
+      content: "version 6 code",
+      version: 6
+    });
+
+    expect(freshRes.applied).toBe(true);
+    expect(mirror2.readShadowFile("backend", "api/routes.ts")).toBe("version 6 code");
+  });
 });

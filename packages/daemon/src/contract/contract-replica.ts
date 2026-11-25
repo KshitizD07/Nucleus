@@ -11,6 +11,7 @@ export interface ContractReplicaOptions {
 export class ContractReplica {
   private readonly jail: WorkspaceJail;
   private readonly contractDir: string;
+  private readonly manifestPath: string;
   private readonly versions: Map<string, number> = new Map();
 
   constructor(options: ContractReplicaOptions) {
@@ -18,6 +19,39 @@ export class ContractReplica {
     const subdir = options.contractSubdir ?? "CONTRACT";
     this.contractDir = this.jail.resolveSafe(subdir);
     fs.mkdirSync(this.contractDir, { recursive: true });
+    this.manifestPath = this.jail.resolveSafe(path.join(".nucleus", "contracts-manifest.json"));
+    this.loadManifest();
+  }
+
+  private loadManifest(): void {
+    if (!fs.existsSync(this.manifestPath)) return;
+    try {
+      const data = JSON.parse(fs.readFileSync(this.manifestPath, "utf8"));
+      if (typeof data === "object" && data !== null) {
+        for (const [k, v] of Object.entries(data)) {
+          if (typeof v === "number") {
+            this.versions.set(k, v);
+          }
+        }
+      }
+    } catch {}
+  }
+
+  private saveManifest(): void {
+    const data: Record<string, number> = {};
+    for (const [k, v] of this.versions.entries()) {
+      data[k] = v;
+    }
+    const dir = path.dirname(this.manifestPath);
+    fs.mkdirSync(dir, { recursive: true });
+    const tmp = path.join(
+      dir,
+      `.contracts-manifest.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`
+    );
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
+      fs.renameSync(tmp, this.manifestPath);
+    } catch {}
   }
 
   /**
@@ -37,6 +71,7 @@ export class ContractReplica {
     fs.mkdirSync(path.dirname(safeTarget), { recursive: true });
     fs.writeFileSync(safeTarget, broadcast.content, "utf8");
     this.versions.set(broadcast.file_path, broadcast.version);
+    this.saveManifest();
 
     return { applied: true };
   }

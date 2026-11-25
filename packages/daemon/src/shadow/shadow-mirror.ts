@@ -6,12 +6,46 @@ import type { LaneShadowSync } from "@nucleus/protocol";
 export class ShadowMirror {
   private readonly jail: WorkspaceJail;
   private readonly shadowsBaseDir: string;
+  private readonly manifestPath: string;
   private readonly fileVersions: Map<string, number> = new Map();
 
   constructor(workspaceRoot: string) {
     this.jail = new WorkspaceJail(workspaceRoot);
     this.shadowsBaseDir = this.jail.resolveSafe(path.join(".nucleus", "shadows"));
     fs.mkdirSync(this.shadowsBaseDir, { recursive: true });
+    this.manifestPath = this.jail.resolveSafe(path.join(".nucleus", "shadows-manifest.json"));
+    this.loadManifest();
+  }
+
+  private loadManifest(): void {
+    if (!fs.existsSync(this.manifestPath)) return;
+    try {
+      const data = JSON.parse(fs.readFileSync(this.manifestPath, "utf8"));
+      if (typeof data === "object" && data !== null) {
+        for (const [k, v] of Object.entries(data)) {
+          if (typeof v === "number") {
+            this.fileVersions.set(k, v);
+          }
+        }
+      }
+    } catch {}
+  }
+
+  private saveManifest(): void {
+    const data: Record<string, number> = {};
+    for (const [k, v] of this.fileVersions.entries()) {
+      data[k] = v;
+    }
+    const dir = path.dirname(this.manifestPath);
+    fs.mkdirSync(dir, { recursive: true });
+    const tmp = path.join(
+      dir,
+      `.shadows-manifest.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`
+    );
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
+      fs.renameSync(tmp, this.manifestPath);
+    } catch {}
   }
 
   /**
@@ -35,6 +69,7 @@ export class ShadowMirror {
     fs.mkdirSync(path.dirname(safeTarget), { recursive: true });
     fs.writeFileSync(safeTarget, sync.content, "utf8");
     this.fileVersions.set(key, sync.version);
+    this.saveManifest();
 
     return { applied: true };
   }
@@ -86,6 +121,7 @@ export class ShadowMirror {
     } else {
       this.fileVersions.delete(key);
     }
+    this.saveManifest();
 
     return true;
   }
@@ -100,5 +136,6 @@ export class ShadowMirror {
         this.fileVersions.delete(key);
       }
     }
+    this.saveManifest();
   }
 }

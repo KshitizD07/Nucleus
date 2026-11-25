@@ -94,19 +94,46 @@ export class ContractStore {
 
   private loadFromDisk(): void {
     if (!fs.existsSync(this.contractDir)) return;
+
+    let savedManifest: Record<string, { version: number; updatedAt: number }> = {};
+    const manifestPath = path.join(this.contractDir, ".contracts-manifest.json");
+    if (fs.existsSync(manifestPath)) {
+      try {
+        savedManifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      } catch {}
+    }
+
     const files = fs.readdirSync(this.contractDir);
     for (const f of files) {
+      if (f.startsWith(".")) continue; // Skip manifest and hidden/tmp files
       const full = path.join(this.contractDir, f);
       if (fs.statSync(full).isFile()) {
         const content = fs.readFileSync(full, "utf8");
+        const meta = savedManifest[f];
         this.entries.set(f, {
           filePath: f,
           content,
-          version: 1,
-          updatedAt: Date.now()
+          version: meta?.version ?? 1,
+          updatedAt: meta?.updatedAt ?? Date.now()
         });
       }
     }
+  }
+
+  private saveManifest(): void {
+    const manifestPath = path.join(this.contractDir, ".contracts-manifest.json");
+    const data: Record<string, { version: number; updatedAt: number }> = {};
+    for (const [k, v] of this.entries.entries()) {
+      data[k] = { version: v.version, updatedAt: v.updatedAt };
+    }
+    const tmp = path.join(
+      this.contractDir,
+      `.contracts-manifest.${Date.now()}.${Math.random().toString(36).slice(2, 6)}.tmp`
+    );
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
+      fs.renameSync(tmp, manifestPath);
+    } catch {}
   }
 
   public update(filePath: string, content: string): ContractEntry {
@@ -125,6 +152,8 @@ export class ContractStore {
     );
     fs.writeFileSync(tempPath, content, "utf8");
     fs.renameSync(tempPath, fullPath);
+
+    this.saveManifest();
 
     return entry;
   }

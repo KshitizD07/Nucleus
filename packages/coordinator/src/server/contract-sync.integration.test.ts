@@ -181,4 +181,21 @@ describe("Milestone 2: Contract Synchronization & Lease Locks", () => {
     daemon.sever();
     await new Promise((r) => setTimeout(r, 100));
   });
+
+  it("should persist contract versions across ContractStore restarts using durable manifest", () => {
+    const store1 = coordinator.getContractStore();
+    store1.update("api.md", "# Version 1");
+    store1.update("api.md", "# Version 2");
+    const entry = store1.update("api.md", "# Version 3");
+    expect(entry.version).toBe(3);
+
+    // Simulate coordinator restart by instantiating a new ContractStore on the same directory
+    const store2 = new (store1.constructor as any)(COORD_CONTRACT_DIR);
+    expect(store2.currentVersion("api.md")).toBe(3);
+    expect(store2.get("api.md")?.content).toBe("# Version 3");
+
+    // Next update should increment to 4
+    const nextEntry = store2.update("api.md", "# Version 4");
+    expect(nextEntry.version).toBe(4);
+  });
 });
