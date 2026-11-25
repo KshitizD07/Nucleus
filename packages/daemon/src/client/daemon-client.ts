@@ -27,6 +27,10 @@ export class DaemonClient {
   private contractVersion: number = 0;
   private taskId: string | null = null;
   private readonly options: Required<DaemonClientOptions>;
+  private connectResolve?: () => void;
+  private connectReject?: (err: Error) => void;
+  private outboundQueue: { type: string; payload: unknown }[] = [];
+  private readonly maxQueueSize = 100;
 
   public onSnapshot?: (snapshot: RoomSnapshotPayload) => void;
   public onMessage?: (type: string, payload: unknown) => void;
@@ -46,11 +50,13 @@ export class DaemonClient {
   public connect(): Promise<void> {
     this.isSevered = false;
     return new Promise((resolve, reject) => {
-      this.initiateConnection(resolve, reject);
+      this.connectResolve = resolve;
+      this.connectReject = reject;
+      this.initiateConnection();
     });
   }
 
-  private initiateConnection(onInitialSuccess?: () => void, onInitialFail?: (err: Error) => void): void {
+  private initiateConnection(): void {
     if (this.isSevered) return;
 
     try {
@@ -59,16 +65,15 @@ export class DaemonClient {
       this.ws.once("open", () => {
         this.reconnectAttempts = 0;
         this.sendHello();
-        if (onInitialSuccess) {
-          onInitialSuccess();
-        } else {
-          this.onReconnect?.();
-        }
+        // Handshake completion awaits session:room_snapshot in handleMessage (Issue 18)
       });
 
       this.ws.on("error", (err) => {
-        if (onInitialFail) {
-          onInitialFail(err);
+        if (this.connectReject) {
+          const reject = this.connectReject;
+          this.connectResolve = undefined;
+          this.connectReject = undefined;
+          reject(err);
         } else {
           console.warn(`[Daemon] Socket error: ${err.message}`);
         }
@@ -82,14 +87,25 @@ export class DaemonClient {
         console.log(`[Daemon] Disconnected: ${code} - ${msg}`);
         this.onDisconnect?.(msg);
 
+        if (this.connectReject && (code === 4000 || code === 4003 || code === 4029)) {
+          const reject = this.connectReject;
+          this.connectResolve = undefined;
+          this.connectReject = undefined;
+          reject(new Error(`Connection failed with code ${code}: ${msg}`));
+          return;
+        }
+
         // If not intentional sever and autoReconnect is enabled, schedule retry
         if (!this.isSevered && this.options.autoReconnect && code !== 1000 && code !== 4003) {
           this.scheduleReconnect();
         }
       });
     } catch (err: any) {
-      if (onInitialFail) {
-        onInitialFail(err);
+      if (this.connectReject) {
+        const reject = this.connectReject;
+        this.connectResolve = undefined;
+        this.connectReject = undefined;
+        reject(err);
       } else {
         this.scheduleReconnect();
       }
@@ -121,6 +137,9 @@ export class DaemonClient {
       this.reconnectTimer = null;
     }
     this.stopHeartbeat();
+    this.outboundQueue = [];
+    this.connectResolve = undefined;
+    this.connectReject = undefined;
     this.ws?.close(1000, "user_exit");
   }
 
@@ -191,17 +210,46 @@ export class DaemonClient {
     if (taskId !== undefined) this.taskId = taskId;
   }
 
+  public isQueueableMessage(type: string): boolean {
+    return (
+      type.startsWith("task:") ||
+      type.startsWith("contract:") ||
+      type.startsWith("sharing:lane_shadow_") ||
+      type === "sharing:file_focus_change"
+    );
+  }
+
+  public getQueuedMessageCount(): number {
+    return this.outboundQueue.length;
+  }
+
   public send(type: string, payload: unknown): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      const envelope = {
+        room_id: "room",
+        node_id: this.options.node_id,
+        ts: Date.now(),
+        type,
+        payload,
+        sig: ""
+      };
+      this.ws.send(JSON.stringify(envelope));
+    } else if (this.isQueueableMessage(type)) {
+      if (this.outboundQueue.length >= this.maxQueueSize) {
+        this.outboundQueue.shift(); // Drop oldest to enforce bounded queue limit
+      }
+      this.outboundQueue.push({ type, payload });
+    }
+  }
+
+  private flushOutboundQueue(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    const envelope = {
-      room_id: "room",
-      node_id: this.options.node_id,
-      ts: Date.now(),
-      type,
-      payload,
-      sig: ""
-    };
-    this.ws.send(JSON.stringify(envelope));
+    while (this.outboundQueue.length > 0) {
+      const item = this.outboundQueue.shift();
+      if (item) {
+        this.send(item.type, item.payload);
+      }
+    }
   }
 
   private sendHello(): void {
@@ -241,6 +289,19 @@ export class DaemonClient {
 
       if (envelope.type === "session:room_snapshot") {
         this.onSnapshot?.(envelope.payload as RoomSnapshotPayload);
+
+        // Handshake completion (Issue 18): resolve connect() if pending, otherwise trigger onReconnect
+        if (this.connectResolve) {
+          const resolve = this.connectResolve;
+          this.connectResolve = undefined;
+          this.connectReject = undefined;
+          resolve();
+        } else {
+          this.onReconnect?.();
+        }
+
+        // Offline queue flushing (Issue 17)
+        this.flushOutboundQueue();
         return;
       }
 

@@ -152,6 +152,7 @@ export class JoinRunner {
     this.client.onReconnect = () => {
       console.log(`\n🔄 [Nucleus] Successfully reconnected to room!`);
       this.diffWatcher?.resume();
+      this.diffWatcher?.scanInitialWorkspace();
       console.log(`[Nucleus] Workspace watcher active. Context published to .nucleus/PEERS.md\n`);
     };
 
