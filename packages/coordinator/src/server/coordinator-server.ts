@@ -220,19 +220,33 @@ export class CoordinatorServer {
 
       if (envelope.type === "sharing:file_focus_change") {
         const focus = envelope.payload as { lane: string; file_path: string; action: "editing" | "idle" | "saved" };
+        const registered = this.registry.get(node_id);
+        const authoritativeLane = registered?.lane ?? focus.lane;
+
         this.registry.updateHeartbeat(node_id, {
           active_file: focus.action === "idle" ? null : focus.file_path,
           status: focus.action === "editing" ? "active" : "idle"
         });
-        this.broadcast(envelope, node_id);
+
+        // Authoritatively reconstruct envelope
+        this.broadcast(
+          buildMessage(this.roomId, node_id, "sharing:file_focus_change", {
+            ...focus,
+            lane: authoritativeLane
+          }),
+          node_id
+        );
         return;
       }
 
       if (envelope.type === "sharing:lane_shadow_sync") {
+        const node = this.registry.get(node_id);
+        const authoritativeLane = node?.lane ?? (envelope.payload as any)?.source_lane;
+
         try {
           const sync = envelope.payload as { source_lane: string; file_path: string; content: string; version: number };
           const taskStorageDir = path.dirname(this.taskBoard.getStoragePath());
-          const shadowLaneDir = path.resolve(taskStorageDir, "shadows", sync.source_lane);
+          const shadowLaneDir = path.resolve(taskStorageDir, "shadows", authoritativeLane);
           const shadowFile = path.resolve(shadowLaneDir, sync.file_path);
 
           // Path containment check on incoming shadow files
@@ -252,10 +266,37 @@ export class CoordinatorServer {
         } catch {
           // Ignore transient write errors
         }
+
+        // Authoritatively reconstruct outgoing shadow sync message
+        const syncPayload = envelope.payload as { source_lane: string; file_path: string; content: string; version: number };
+        this.broadcast(
+          buildMessage(this.roomId, node_id, "sharing:lane_shadow_sync", {
+            ...syncPayload,
+            source_lane: authoritativeLane
+          }),
+          node_id
+        );
+        return;
       }
 
-      // Fan out all other messages (diff streams, task events, lane shadow syncs, etc.)
-      this.broadcast(envelope, node_id);
+      if (envelope.type === "sharing:live_diff_stream") {
+        const node = this.registry.get(node_id);
+        const diffPayload = envelope.payload as any;
+        const authoritativeLane = node?.lane ?? diffPayload?.lane;
+
+        // Authoritatively reconstruct live diff stream message
+        this.broadcast(
+          buildMessage(this.roomId, node_id, "sharing:live_diff_stream", {
+            ...diffPayload,
+            lane: authoritativeLane
+          }),
+          node_id
+        );
+        return;
+      }
+
+      // Drop any unrecognized or unauthorized message type (Issues 8 & 9 fix)
+      console.warn(`[Coordinator] Dropped unauthorized/unknown client message type from ${node_id}: ${envelope.type}`);
     } catch {
       // Silently drop malformed messages
     }

@@ -168,4 +168,75 @@ describe("Milestone 3: Live Diff Streaming, Shadows & Agent Context (.nucleus/PE
 
     diffWatcher.stop();
   });
+
+  it("should drop unauthorized client message types and reconstruct authoritative sender identity", async () => {
+    const tokenBE = coordinator.issueInvite("backend");
+    const tokenFE = coordinator.issueInvite("frontend");
+
+    const daemonBE = new DaemonClient({
+      url: `ws://localhost:${TEST_PORT}`,
+      node_id: "node-be-legit",
+      join_token: tokenBE,
+      workspace_path: BE_WORKSPACE,
+      lane: "backend"
+    });
+
+    const daemonFE = new DaemonClient({
+      url: `ws://localhost:${TEST_PORT}`,
+      node_id: "node-fe-listener",
+      join_token: tokenFE,
+      workspace_path: FE_WORKSPACE,
+      lane: "frontend"
+    });
+
+    await daemonBE.connect();
+    await daemonFE.connect();
+
+    const receivedMessages: { type: string; envelope?: any }[] = [];
+    (daemonFE as any).ws.on("message", (raw: string) => {
+      try {
+        const parsed = JSON.parse(raw);
+        receivedMessages.push({ type: parsed.type, envelope: parsed });
+      } catch {}
+    });
+
+    // 1. Attacker sends unauthorized fake server event
+    daemonBE.send("session:peer_joined", { node_id: "ghost", lane: "hacked" });
+    daemonBE.send("custom:unauthorized_event", { data: "malicious" });
+
+    // 2. Attacker sends live diff with spoofed node_id & room_id
+    (daemonBE as any).ws.send(JSON.stringify({
+      room_id: "spoofed-room",
+      node_id: "spoofed-admin",
+      ts: Date.now(),
+      type: "sharing:live_diff_stream",
+      payload: {
+        lane: "backend",
+        active_file: "test.ts",
+        files_changed: ["test.ts"],
+        patch_summary: "+1",
+        diff_hunk: "hello"
+      },
+      sig: ""
+    }));
+
+    await new Promise((r) => setTimeout(r, 150));
+
+    // Fake events must NEVER be forwarded
+    const fakePeer = receivedMessages.find((m) => m.type === "session:peer_joined" && m.envelope?.payload?.node_id === "ghost");
+    expect(fakePeer).toBeUndefined();
+
+    const customEvent = receivedMessages.find((m) => m.type === "custom:unauthorized_event");
+    expect(customEvent).toBeUndefined();
+
+    // The legitimate diff was forwarded, but with server-authoritative node_id and room_id!
+    const forwardedDiff = receivedMessages.find((m) => m.type === "sharing:live_diff_stream");
+    expect(forwardedDiff).toBeDefined();
+    expect(forwardedDiff?.envelope.node_id).toBe("node-be-legit"); // Bound from authenticated socket!
+    expect(forwardedDiff?.envelope.room_id).toBe(TEST_ROOM);      // Bound from server room!
+
+    daemonBE.sever();
+    daemonFE.sever();
+    await new Promise((r) => setTimeout(r, 100));
+  });
 });
