@@ -18,7 +18,7 @@
 │ │  task board, log) │ │  generator)       │                                   │
 │ └─────────┬─────────┘ └───────────────────┘                                   │
 └───────────┼───────────────────────────────────────────────────────────────────┘
-            │ WebSocket (TLS 1.3, per-room token auth, signed messages)
+            │ WebSocket (TLS 1.3, per-room token auth, server-authoritative messages)
             │
    ┌────────┴─────────────┬──────────────────────────┬────────────────────────┐
    │                      │                          │                        │

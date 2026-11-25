@@ -54,7 +54,7 @@ Nucleus solves this by transforming software engineering into a **structured, li
 │ │  task board, log) │ │  generator)       │                                           │
 │ └─────────┬─────────┘ └───────────────────┘                                           │
 └───────────┼───────────────────────────────────────────────────────────────────────────┘
-            │ WebSocket (Local Wi-Fi / Tunnel, per-room token auth, signed JSON envelopes)
+            │ WebSocket (Local Wi-Fi / Tunnel, per-room token auth, server-authoritative envelopes)
             │
    ┌────────┴─────────────┬──────────────────────────┬────────────────────────┐
    │                      │                          │                        │

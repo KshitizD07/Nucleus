@@ -6,7 +6,9 @@ import {
   LiveDiffStreamSchema,
   HelloPayloadSchema,
   HeartbeatPayloadSchema,
-  SeveredPayloadSchema
+  SeveredPayloadSchema,
+  signEnvelope,
+  verifyEnvelopeSignature
 } from "@nucleus/protocol";
 
 describe("Protocol Envelopes and Schemas", () => {
@@ -57,6 +59,33 @@ describe("Protocol Envelopes and Schemas", () => {
     expect(parsed.spec_file).toBe("CONTRACT/specs/auth.md");
     expect(parsed.spec_url).toBe("https://figma.com/file/123");
     expect(parsed.description).toBe("Detailed description of JWT requirements");
+  });
+
+  it("should sign and verify envelope using HMAC-SHA256 signature helpers", () => {
+    const secret = "room-secret-key-xyz-123";
+    const unsigned = {
+      room_id: "room-secure",
+      node_id: "node-1",
+      ts: 1700000000000,
+      type: "session:heartbeat",
+      payload: { status: "active" }
+    };
+
+    const signed = signEnvelope(unsigned, secret);
+    expect(signed.sig).toBeTruthy();
+    expect(signed.sig.length).toBe(64); // 256-bit hex
+
+    const isValid = verifyEnvelopeSignature(signed, secret);
+    expect(isValid).toBe(true);
+
+    const isTampered = verifyEnvelopeSignature(
+      { ...signed, payload: { status: "idle" } },
+      secret
+    );
+    expect(isTampered).toBe(false);
+
+    const wrongKey = verifyEnvelopeSignature(signed, "wrong-key");
+    expect(wrongKey).toBe(false);
   });
 
   it("should validate live diff stream frame", () => {
