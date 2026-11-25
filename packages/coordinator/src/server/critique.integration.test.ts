@@ -113,6 +113,37 @@ describe("Milestone 4: Task Board Lifecycle & Disposable Worktree Critique Pipel
     taskReplica.applyUpdate(updatedTask);
     expect(taskReplica.getTask("task-auth-01")?.status).toBe("active");
 
+    // Security Check: Node-worker cannot self-approve their own task
+    const selfApprovePromise = new Promise<any>((resolve) => {
+      daemon.onMessage = (type, payload) => {
+        if (type === "task:update_failed") resolve(payload);
+      };
+    });
+    daemon.updateTaskStatus("task-auth-01", "approved");
+    const failedApproval = await selfApprovePromise;
+    expect(failedApproval.task_id).toBe("task-auth-01");
+    expect(failedApproval.reason).toContain("cannot directly set status to 'approved'");
+
+    // Security Check: Cross-lane node cannot update backend task
+    const crossLaneDaemon = new DaemonClient({
+      url: `ws://localhost:${TEST_PORT}`,
+      node_id: "node-frontend-hacker",
+      join_token: coordinator.issueInvite("frontend"),
+      workspace_path: CONTRIBUTOR_WS,
+      lane: "frontend"
+    });
+    await crossLaneDaemon.connect();
+
+    const crossUpdatePromise = new Promise<any>((resolve) => {
+      crossLaneDaemon.onMessage = (type, payload) => {
+        if (type === "task:update_failed") resolve(payload);
+      };
+    });
+    crossLaneDaemon.updateTaskStatus("task-auth-01", "in_review");
+    const crossFailed = await crossUpdatePromise;
+    expect(crossFailed.reason).toContain("Lane mismatch");
+    crossLaneDaemon.sever();
+
     daemon.sever();
     await new Promise((r) => setTimeout(r, 100));
   });

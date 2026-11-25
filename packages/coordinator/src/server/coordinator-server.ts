@@ -322,6 +322,62 @@ export class CoordinatorServer {
 
   private handleTaskStatusUpdate(node_id: string, payload: unknown): void {
     const update = TaskStatusUpdateSchema.parse(payload);
+    const node = this.registry.get(node_id);
+    const task = this.taskBoard.getTask(update.task_id);
+
+    if (!task) {
+      const ws = this.sockets.get(node_id);
+      ws?.send(JSON.stringify(buildMessage(this.roomId, "coordinator", "task:update_failed", {
+        task_id: update.task_id,
+        reason: `Task '${update.task_id}' not found`
+      })));
+      return;
+    }
+
+    const callerLane = node?.lane;
+    const isInitiatorOrJudge = callerLane === "initiator" || callerLane === "judge";
+
+    // 1. Self-approval prohibition: regular contributors cannot directly approve or reject tasks
+    if ((update.status === "approved" || update.status === "changes_requested") && !isInitiatorOrJudge) {
+      const ws = this.sockets.get(node_id);
+      ws?.send(JSON.stringify(buildMessage(this.roomId, "coordinator", "task:update_failed", {
+        task_id: update.task_id,
+        reason: `Forbidden: Node '${node_id}' in lane '${callerLane}' cannot directly set status to '${update.status}'. Reviews must be processed by Critique Gate.`
+      })));
+      return;
+    }
+
+    // 2. Lane verification: contributor can only update tasks belonging to their lane
+    if (!isInitiatorOrJudge && callerLane && task.lane !== callerLane) {
+      const ws = this.sockets.get(node_id);
+      ws?.send(JSON.stringify(buildMessage(this.roomId, "coordinator", "task:update_failed", {
+        task_id: update.task_id,
+        reason: `Forbidden: Lane mismatch. Node '${node_id}' in lane '${callerLane}' cannot update task '${task.id}' in lane '${task.lane}'`
+      })));
+      return;
+    }
+
+    // 3. Ownership verification: task assigned to another node cannot be modified by peers
+    const isOwner = task.assigned_to === node_id || (task.assigned_to && task.assigned_to.includes(node_id));
+    if (!isInitiatorOrJudge && task.assigned_to && !isOwner) {
+      const ws = this.sockets.get(node_id);
+      ws?.send(JSON.stringify(buildMessage(this.roomId, "coordinator", "task:update_failed", {
+        task_id: update.task_id,
+        reason: `Forbidden: Task '${task.id}' is assigned to '${task.assigned_to}', not '${node_id}'`
+      })));
+      return;
+    }
+
+    // 4. In_review transition requires the task to be claimed first
+    if (update.status === "in_review" && !task.assigned_to) {
+      const ws = this.sockets.get(node_id);
+      ws?.send(JSON.stringify(buildMessage(this.roomId, "coordinator", "task:update_failed", {
+        task_id: update.task_id,
+        reason: `Forbidden: Unassigned task '${task.id}' cannot be submitted for review before being claimed`
+      })));
+      return;
+    }
+
     const result = this.taskBoard.updateStatus(update.task_id, update.status, update.branch);
 
     if (result.success && result.task) {
