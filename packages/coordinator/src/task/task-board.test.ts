@@ -154,4 +154,34 @@ describe("TaskBoardManager Revision Tracking & Optimistic Concurrency", () => {
     expect(forced.success).toBe(true);
     expect(board.getTask("task-fsm")?.status).toBe("unassigned");
   });
+
+  it("should separate immutable assigned_node_id from mutable display_name", () => {
+    const board = new TaskBoardManager(tempDir);
+    board.addTask({
+      id: "task-identity",
+      title: "Identity Task",
+      lane: "backend",
+      status: "unassigned",
+      assigned_to: null,
+      depends_on_contracts: []
+    });
+
+    // 1. Rohan claims with display name
+    const claimRes = board.claimTask("task-identity", "rohan-laptop-01", undefined, "backend", "Rohan");
+    expect(claimRes.success).toBe(true);
+
+    const task = board.getTask("task-identity");
+    expect(task?.assigned_node_id).toBe("rohan-laptop-01");
+    expect(task?.assigned_name).toBe("Rohan");
+    expect(task?.assigned_to).toContain("Rohan (rohan-laptop-01)");
+
+    // 2. Impersonator with matching display name "Rohan" but different node_id cannot steal claim
+    const spoofClaim = board.claimTask("task-identity", "impersonator-node", undefined, "backend", "Rohan");
+    expect(spoofClaim.success).toBe(false);
+    expect(spoofClaim.reason).toContain("already claimed by Rohan");
+
+    // 3. Same node claiming again succeeds
+    const sameClaim = board.claimTask("task-identity", "rohan-laptop-01", undefined, "backend", "Rohan");
+    expect(sameClaim.success).toBe(true);
+  });
 });

@@ -17,6 +17,8 @@ export const TaskItemSchema = z.object({
   status: TaskStatusSchema,
   revision: z.number().int().positive().optional(),
   assigned_to: z.string().nullable().default(null),
+  assigned_node_id: z.string().nullable().optional(),
+  assigned_name: z.string().nullable().optional(),
   depends_on_contracts: z.array(z.string()).default([]),
   branch: z.string().optional(),
   description: z.string().optional(),

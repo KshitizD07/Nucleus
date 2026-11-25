@@ -234,4 +234,66 @@ describe("Milestone 4: Task Board Lifecycle & Disposable Worktree Critique Pipel
     daemon.sever();
     await new Promise((r) => setTimeout(r, 100));
   });
+
+  it("should permit legitimate node to update its task even when display_name is distinct from node_id", async () => {
+    const token1 = coordinator.issueInvite("backend");
+    const token2 = coordinator.issueInvite("backend");
+
+    const daemon1 = new DaemonClient({
+      url: `ws://localhost:${TEST_PORT}`,
+      node_id: "node-alice-laptop",
+      join_token: token1,
+      workspace_path: CONTRIBUTOR_WS,
+      lane: "backend"
+    });
+
+    const daemon2 = new DaemonClient({
+      url: `ws://localhost:${TEST_PORT}`,
+      node_id: "node-bob-laptop",
+      join_token: token2,
+      workspace_path: CONTRIBUTOR_WS,
+      lane: "backend"
+    });
+
+    await daemon1.connect();
+    await daemon2.connect();
+
+    // Alice claims with human display name "Alice"
+    const claimPromise = new Promise<any>((resolve) => {
+      daemon1.onMessage = (type, payload) => {
+        if (type === "task:status") resolve(payload);
+      };
+    });
+    daemon1.claimTask("task-auth-01", "Alice");
+    const claimed = await claimPromise;
+
+    expect(claimed.assigned_node_id).toBe("node-alice-laptop");
+    expect(claimed.assigned_name).toBe("Alice");
+    expect(claimed.assigned_to).toContain("Alice (node-alice-laptop)");
+
+    // Alice updates her own task -> SUCCESS because node_id matches assigned_node_id!
+    const aliceUpdatePromise = new Promise<any>((resolve) => {
+      daemon1.onMessage = (type, payload) => {
+        if (type === "task:status") resolve(payload);
+      };
+    });
+    daemon1.updateTaskStatus("task-auth-01", "in_review", "feature");
+    const updated = await aliceUpdatePromise;
+    expect(updated.status).toBe("in_review");
+
+    // Bob tries to update Alice's task -> FORBIDDEN!
+    const bobFailedPromise = new Promise<any>((resolve) => {
+      daemon2.onMessage = (type, payload) => {
+        if (type === "task:update_failed") resolve(payload);
+      };
+    });
+    daemon2.updateTaskStatus("task-auth-01", "active");
+    const bobFailure = await bobFailedPromise;
+    expect(bobFailure.reason).toContain("Forbidden");
+    expect(bobFailure.reason).toContain("node-bob-laptop");
+
+    daemon1.sever();
+    daemon2.sever();
+    await new Promise((r) => setTimeout(r, 100));
+  });
 });

@@ -564,12 +564,15 @@ export class CoordinatorServer {
     }
 
     // 3. Ownership verification: task assigned to another node cannot be modified by peers
-    const isOwner = task.assigned_to === node_id || (task.assigned_to && task.assigned_to.includes(node_id));
-    if (!isInitiatorOrJudge && task.assigned_to && !isOwner) {
+    const isOwner = task.assigned_node_id
+      ? task.assigned_node_id === node_id
+      : (task.assigned_to === node_id || (task.assigned_to && task.assigned_to.includes(node_id)));
+
+    if (!isInitiatorOrJudge && (task.assigned_node_id || task.assigned_to) && !isOwner) {
       const ws = this.sockets.get(node_id);
       ws?.send(JSON.stringify(buildMessage(this.roomId, "coordinator", "task:update_failed", {
         task_id: update.task_id,
-        reason: `Forbidden: Task '${task.id}' is assigned to '${task.assigned_to}', not '${node_id}'`
+        reason: `Forbidden: Task '${task.id}' is assigned to '${task.assigned_name || task.assigned_to}', not '${node_id}'`
       })));
       return;
     }

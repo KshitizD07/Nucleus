@@ -76,11 +76,19 @@ export class TaskBoardManager {
         reason: `Task ${taskId} is currently submitted for review.`
       };
     }
-    const assignee = displayName || nodeId;
-    if (task.assigned_to && task.assigned_to !== assignee && task.assigned_to !== nodeId) {
+    const assignee = displayName ? `${displayName} (${nodeId})` : nodeId;
+    if (task.assigned_node_id && task.assigned_node_id !== nodeId) {
+      return {
+        success: false,
+        reason: `Task ${taskId} is already claimed by ${task.assigned_name || task.assigned_to || task.assigned_node_id}`
+      };
+    }
+    if (!task.assigned_node_id && task.assigned_to && task.assigned_to !== assignee && task.assigned_to !== nodeId) {
       return { success: false, reason: `Task ${taskId} is already claimed by ${task.assigned_to}` };
     }
 
+    task.assigned_node_id = nodeId;
+    task.assigned_name = displayName || nodeId;
     task.assigned_to = assignee;
     task.status = "active";
     task.revision = (task.revision ?? 1) + 1;
@@ -128,6 +136,8 @@ export class TaskBoardManager {
     task.revision = (task.revision ?? 1) + 1;
     if (status === "unassigned") {
       task.assigned_to = null;
+      task.assigned_node_id = null;
+      task.assigned_name = null;
     }
     if (branch) task.branch = branch;
 
